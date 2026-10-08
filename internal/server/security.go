@@ -52,11 +52,11 @@ func (s Session) Protect(next http.Handler) http.Handler {
 		setSecurityHeaders(w.Header())
 		tokens := r.Header.Values("X-HarnessScope-Token")
 		if len(tokens) != 1 || s.token == "" || subtle.ConstantTimeCompare([]byte(tokens[0]), []byte(s.token)) != 1 {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			writeAPIError(w, http.StatusUnauthorized, "unauthorized", "Authentication is required.")
 			return
 		}
 		if !validSessionHost(r) {
-			http.Error(w, "invalid dashboard host", http.StatusForbidden)
+			writeAPIError(w, http.StatusForbidden, "forbidden", "Invalid dashboard host.")
 			return
 		}
 		mutation := r.Method != http.MethodGet && r.Method != http.MethodHead
@@ -65,23 +65,23 @@ func (s Session) Protect(next http.Handler) http.Handler {
 		// exact serialization rejects paths, credentials, queries, fragments,
 		// duplicate headers, and alternate schemes without normalizing them.
 		if len(origins) > 1 || (len(origins) == 1 && origins[0] != "http://"+r.Host) || (mutation && len(origins) == 0) {
-			http.Error(w, "invalid dashboard origin", http.StatusForbidden)
+			writeAPIError(w, http.StatusForbidden, "forbidden", "Invalid dashboard origin.")
 			return
 		}
 		if mutation {
 			types := r.Header.Values("Content-Type")
 			if len(types) != 1 {
-				http.Error(w, "application/json is required", http.StatusUnsupportedMediaType)
+				writeAPIError(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "application/json is required.")
 				return
 			}
 			mediaType, _, err := mime.ParseMediaType(types[0])
 			if err != nil || mediaType != "application/json" {
-				http.Error(w, "application/json is required", http.StatusUnsupportedMediaType)
+				writeAPIError(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "application/json is required.")
 				return
 			}
 		}
 		if r.ContentLength > maxSessionBody {
-			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			writeAPIError(w, http.StatusRequestEntityTooLarge, "body_too_large", "The request body is too large.")
 			return
 		}
 		if r.Body != nil {
@@ -91,11 +91,11 @@ func (s Session) Protect(next http.Handler) http.Handler {
 			body, err := io.ReadAll(io.LimitReader(r.Body, maxSessionBody+1))
 			r.Body.Close()
 			if len(body) > maxSessionBody {
-				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+				writeAPIError(w, http.StatusRequestEntityTooLarge, "body_too_large", "The request body is too large.")
 				return
 			}
 			if err != nil {
-				http.Error(w, "invalid request body", http.StatusBadRequest)
+				writeAPIError(w, http.StatusBadRequest, "invalid_request", "The request body is invalid.")
 				return
 			}
 			r.Body = io.NopCloser(bytes.NewReader(body))

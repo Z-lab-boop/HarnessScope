@@ -6,8 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
+	"sort"
 	"sync"
 	"time"
 
@@ -128,7 +131,7 @@ func (s *Service) ApplyFixes(ctx context.Context, expectedRevision uint64, ids [
 		return DashboardState{}, err
 	}
 	if len(ids) == 0 {
-		return DashboardState{}, fmt.Errorf("select at least one SAFE fix ID")
+		return DashboardState{}, fmt.Errorf("%w: select at least one SAFE fix ID", ErrInvalidRequest)
 	}
 	if err := validateFixIDs(ids); err != nil {
 		return DashboardState{}, err
@@ -137,28 +140,47 @@ func (s *Service) ApplyFixes(ctx context.Context, expectedRevision uint64, ids [
 	for _, id := range ids {
 		found := false
 		for _, plan := range published.FixPlans {
-			if plan.ID == id && plan.Risk == model.RiskSafe {
+			if plan.ID == id {
+				if plan.Risk != model.RiskSafe {
+					return DashboardState{}, ErrUnsafeFix
+				}
 				found = true
 				break
 			}
 		}
 		if !found {
-			return DashboardState{}, fmt.Errorf("selected SAFE fix ID was not found")
+			return DashboardState{}, ErrNotFound
 		}
 	}
 	raw, err := s.config.Scan(ctx)
 	if err != nil {
 		return DashboardState{}, err
 	}
-	plans, err := fixes.Plan(raw, ids)
+	plans, err := fixes.Plan(raw, nil)
 	if err != nil {
 		return DashboardState{}, err
 	}
-	for _, plan := range plans {
-		if plan.Risk != model.RiskSafe {
-			return DashboardState{}, fmt.Errorf("selected fix is not SAFE")
+	selected := make([]model.FixPlan, 0, len(ids))
+	for _, id := range ids {
+		found := false
+		for _, plan := range plans {
+			if plan.ID != id {
+				continue
+			}
+			if plan.Risk != model.RiskSafe {
+				return DashboardState{}, ErrUnsafeFix
+			}
+			selected = append(selected, plan)
+			found = true
+			break
+		}
+		if !found {
+			return DashboardState{}, ErrNotFound
 		}
 	}
+	// Keep the planner's canonical transaction order, independent of UI order.
+	sort.Slice(selected, func(i, j int) bool { return selected[i].ID < selected[j].ID })
+	plans = selected
 	backupRoot := filepath.Join(s.config.AppDataDir, "backups")
 	applied := []string{}
 	unwind := func(cause error) (DashboardState, error) {
@@ -219,7 +241,7 @@ func (s *Service) Rollback(ctx context.Context, expectedRevision uint64, backupI
 		return DashboardState{}, err
 	}
 	if !backupIDPattern.MatchString(backupID) {
-		return DashboardState{}, fmt.Errorf("invalid backup ID")
+		return DashboardState{}, ErrInvalidRequest
 	}
 	backupRoot := filepath.Join(s.config.AppDataDir, "backups")
 	backups, err := fixes.ListBackups(backupRoot)
@@ -234,7 +256,7 @@ func (s *Service) Rollback(ctx context.Context, expectedRevision uint64, backupI
 		}
 	}
 	if !found {
-		return DashboardState{}, fmt.Errorf("backup ID was not found")
+		return DashboardState{}, ErrNotFound
 	}
 	if err := fixes.Rollback(ctx, backupRoot, backupID); err != nil {
 		return DashboardState{}, err
@@ -260,6 +282,9 @@ func (s *Service) SaveSnapshot(ctx context.Context, expectedRevision uint64, nam
 	if err := s.checkRevision(ctx, expectedRevision); err != nil {
 		return snapshots.Metadata{}, err
 	}
+	if !snapshotIDPattern.MatchString(name) {
+		return snapshots.Metadata{}, ErrInvalidRequest
+	}
 	meta, err := s.snapshotStore().Save(name, s.State().Result)
 	meta.Path = "" // Metadata.Path is a store-internal filesystem capability.
 	return meta, err
@@ -271,8 +296,14 @@ func (s *Service) CompareSnapshot(ctx context.Context, expectedRevision uint64, 
 	if err := s.checkRevision(ctx, expectedRevision); err != nil {
 		return DashboardState{}, err
 	}
+	if !snapshotIDPattern.MatchString(name) {
+		return DashboardState{}, ErrInvalidRequest
+	}
 	baseline, err := s.snapshotStore().Load(name)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return DashboardState{}, ErrNotFound
+		}
 		return DashboardState{}, err
 	}
 	state := s.State()
@@ -290,6 +321,10 @@ func (s *Service) CompareSnapshot(ctx context.Context, expectedRevision uint64, 
 }
 
 func (s *Service) Export(ctx context.Context, expectedRevision uint64, output io.Writer, toolVersion string) (export.Manifest, error) {
+	return s.exportActive(ctx, expectedRevision, output, toolVersion, "")
+}
+
+func (s *Service) exportActive(ctx context.Context, expectedRevision uint64, output io.Writer, toolVersion, baseline string) (export.Manifest, error) {
 	s.opMu.Lock()
 	defer s.opMu.Unlock()
 	if err := s.checkRevision(ctx, expectedRevision); err != nil {
@@ -299,6 +334,14 @@ func (s *Service) Export(ctx context.Context, expectedRevision uint64, output io
 		return export.Manifest{}, fmt.Errorf("export writer is required")
 	}
 	state := s.State()
+	if baseline != "" {
+		if !snapshotIDPattern.MatchString(baseline) {
+			return export.Manifest{}, ErrInvalidRequest
+		}
+		if state.Drift == nil || state.Drift.Baseline != baseline {
+			return export.Manifest{}, ErrStaleRevision
+		}
+	}
 	return export.New(s.config.Clock).Write(ctx, output, export.Input{ToolVersion: toolVersion, Report: state.Result, Drift: state.Drift})
 }
 
@@ -322,16 +365,106 @@ func (s *Service) checkRevision(ctx context.Context, expected uint64) error {
 
 var fixIDPattern = regexp.MustCompile(`^FIX-[A-Z]+-[A-F0-9]{8}$`)
 var backupIDPattern = regexp.MustCompile(`^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{16}$`)
+var snapshotIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+var publicIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 
 func validateFixIDs(ids []string) error {
 	seen := make(map[string]bool, len(ids))
 	for _, id := range ids {
 		if !fixIDPattern.MatchString(id) || seen[id] {
-			return fmt.Errorf("invalid or duplicate fix ID")
+			return fmt.Errorf("%w: invalid or duplicate fix ID", ErrInvalidRequest)
 		}
 		seen[id] = true
 	}
 	return nil
+}
+
+// Explain resolves only an exact public node ID and returns owned provenance.
+func (s *Service) Explain(id string) (ExplainResponse, error) {
+	if !publicIDPattern.MatchString(id) {
+		return ExplainResponse{}, ErrInvalidRequest
+	}
+	state := s.State()
+	for _, node := range state.Result.Analysis.Graph.Nodes {
+		if node.ID != id {
+			continue
+		}
+		result := ExplainResponse{Node: node, Edges: []model.Edge{}}
+		for _, edge := range state.Result.Analysis.Graph.Edges {
+			if edge.From == id || edge.To == id {
+				result.Edges = append(result.Edges, edge)
+			}
+		}
+		return result, nil
+	}
+	return ExplainResponse{}, ErrNotFound
+}
+
+// CompareClients uses only clients registered in one immutable public revision.
+func (s *Service) CompareClients(left, right string) (ComparisonResponse, error) {
+	if !publicIDPattern.MatchString(left) || !publicIDPattern.MatchString(right) {
+		return ComparisonResponse{}, ErrInvalidRequest
+	}
+	state := s.State()
+	clients := map[string]bool{}
+	for _, client := range state.Result.Analysis.Clients {
+		clients[client.ID] = true
+	}
+	if !clients[left] || !clients[right] {
+		return ComparisonResponse{}, ErrNotFound
+	}
+	rows := map[string]*ComparisonRow{}
+	for _, node := range state.Result.Analysis.Graph.Nodes {
+		if (node.Client != left && node.Client != right) || node.Type == model.NodeClient || node.Type == model.NodeSource || node.DisplayName == "" {
+			continue
+		}
+		key := string(node.Type) + "\x00" + node.DisplayName
+		if rows[key] == nil {
+			rows[key] = &ComparisonRow{Name: node.DisplayName, Type: node.Type}
+		}
+		row := rows[key]
+		if node.Client == left && row.Left == nil {
+			owned := node
+			row.Left = &owned
+		}
+		if node.Client == right && row.Right == nil {
+			owned := node
+			row.Right = &owned
+		}
+	}
+	result := ComparisonResponse{Left: left, Right: right, Rows: []ComparisonRow{}}
+	for _, row := range rows {
+		switch {
+		case row.Left == nil || row.Right == nil:
+			row.Status = "missing"
+		case reflect.DeepEqual(row.Left.Attributes, row.Right.Attributes):
+			row.Status = "same"
+		default:
+			row.Status = "different"
+		}
+		result.Rows = append(result.Rows, *row)
+	}
+	sort.Slice(result.Rows, func(i, j int) bool {
+		if result.Rows[i].Name != result.Rows[j].Name {
+			return result.Rows[i].Name < result.Rows[j].Name
+		}
+		return result.Rows[i].Type < result.Rows[j].Type
+	})
+	return result, nil
+}
+
+// ListSnapshots never returns store-internal filesystem capabilities.
+func (s *Service) ListSnapshots(ctx context.Context) ([]snapshots.Metadata, error) {
+	s.opMu.Lock()
+	defer s.opMu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	items, err := s.snapshotStore().List()
+	for i := range items {
+		items[i].Path = ""
+	}
+	return items, err
 }
 
 func (s *Service) prepare(raw model.ScanResult, revision uint64) (model.ScanResult, DashboardState, error) {
