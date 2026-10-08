@@ -58,7 +58,8 @@ test("dry plans render text only and restrict selection to SAFE", async ({ page 
   await expect(page.locator("img")).toHaveCount(0);
   await expect(page.locator("body")).not.toContainText("RAW_REPLACEMENT_CANARY");
   await page.getByRole("button", { name: "Refresh dry plan" }).click();
-  await expect.poll(() => calls.filter((c) => c.path.endsWith("/plan")).length).toBe(1);
+  await expect.poll(() => calls.filter((c) => c.path.endsWith("/rescan")).length).toBe(1);
+  await expect(page.getByText("REV 8", { exact: true })).toBeVisible();
   expect(requests.every((url) => new URL(url).origin === base)).toBe(true);
 });
 

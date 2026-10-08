@@ -6,18 +6,108 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/Z-lab-boop/harnessscope/internal/fixes"
 	"github.com/Z-lab-boop/harnessscope/internal/model"
 )
+
+func overlappingPathFixture(t *testing.T, concurrent bool) (*Service, string, []byte) {
+	t.Helper()
+	root := t.TempDir()
+	path := filepath.Join(root, "hook.sh")
+	if err := os.Mkdir(filepath.Join(root, "sub"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	aliases := []string{root + "/./hook.sh", root + "/sub/../hook.sh"}
+	original := []byte("#!/bin/sh\n# " + aliases[0] + "\n# " + aliases[1] + "\n")
+	if err := os.WriteFile(path, original, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	s, err := NewService(ServiceConfig{Workspace: root, HomeDir: root, AppDataDir: filepath.Join(root, "data"), Scan: func(context.Context) (model.ScanResult, error) {
+		calls++
+		if concurrent && calls == 3 {
+			if err := os.WriteFile(path, append(append([]byte(nil), original...), []byte("# concurrent writer\n")...), 0o751); err != nil {
+				return model.ScanResult{}, err
+			}
+		}
+		nodes := []model.ConfigNode{{ID: "hook", Type: model.NodeHook, Attributes: map[string]model.SafeValue{"command": {Display: path, Present: true}}}}
+		for i, alias := range aliases {
+			nodes = append(nodes, model.ConfigNode{ID: string(rune('a' + i)), Attributes: map[string]model.SafeValue{"path": {Display: alias, Present: true}}, Origins: []model.Origin{{SourceID: "hook"}}})
+		}
+		return model.ScanResult{Analysis: model.Analysis{Sources: []model.ConfigSource{{ID: "hook", CanonicalPath: path, LogicalPath: path, Exists: true, Readable: true}}, Graph: model.Graph{Nodes: nodes}}}, nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s, path, original
+}
+
+func TestServiceOverlappingSelectionPreservesExactPathRange(t *testing.T) {
+	for _, all := range []bool{false, true} {
+		t.Run(fmt.Sprint("all=", all), func(t *testing.T) {
+			s, path, original := overlappingPathFixture(t, false)
+			raw, err := s.config.Scan(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			plans, err := fixes.Plan(raw, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(plans) != 3 {
+				t.Fatalf("plans: %+v", plans)
+			}
+			ids := []string{plans[0].ID, plans[2].ID}
+			chosen := []model.Edit{plans[2].Edits[0]}
+			if all {
+				ids = append(ids, plans[1].ID)
+				chosen = append(chosen, plans[1].Edits[0])
+			}
+			sort.Slice(chosen, func(i, j int) bool { return chosen[i].StartOffset > chosen[j].StartOffset })
+			want := append([]byte(nil), original...)
+			for _, edit := range chosen {
+				want = append(append(append([]byte(nil), want[:edit.StartOffset]...), edit.Replacement...), want[edit.EndOffset:]...)
+			}
+			state, err := s.ApplyFixes(context.Background(), 1, ids)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, _ := os.ReadFile(path)
+			if !bytes.Equal(got, want) {
+				t.Fatal("applied an unselected path range instead of the selected range")
+			}
+			if len(state.Backups) != len(ids) || state.Revision != 2 {
+				t.Fatal("selection was not applied one-to-one in one publication")
+			}
+		})
+	}
+}
+
+func TestServiceRejectsConcurrentTouchedTargetBetweenTransactions(t *testing.T) {
+	s, path, original := overlappingPathFixture(t, true)
+	before := s.State()
+	_, err := s.ApplyFixes(context.Background(), 1, []string{before.FixPlans[0].ID, before.FixPlans[2].ID})
+	if !errors.Is(err, fixes.ErrTargetChanged) {
+		t.Fatalf("concurrent touched target was adopted: %v", err)
+	}
+	got, _ := os.ReadFile(path)
+	info, _ := os.Stat(path)
+	if !bytes.Equal(got, original) || info.Mode().Perm() != 0o640 || !reflect.DeepEqual(before, s.State()) {
+		t.Fatal("conflict did not unwind the started batch")
+	}
+}
 
 func TestServiceApplyReplansOverlappingContentAndMode(t *testing.T) {
 	root := t.TempDir()

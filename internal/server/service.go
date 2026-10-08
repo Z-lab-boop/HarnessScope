@@ -181,7 +181,10 @@ func (s *Service) ApplyFixes(ctx context.Context, expectedRevision uint64, ids [
 	}
 	// Keep the planner's canonical transaction order, independent of UI order.
 	sort.Slice(selected, func(i, j int) bool { return selected[i].ID < selected[j].ID })
-	plans = selected
+	steps, err := prepareFixSteps(selected)
+	if err != nil {
+		return DashboardState{}, err
+	}
 	backupRoot := filepath.Join(s.config.AppDataDir, "backups")
 	applied := []string{}
 	unwind := func(cause error) (DashboardState, error) {
@@ -193,26 +196,30 @@ func (s *Service) ApplyFixes(ctx context.Context, expectedRevision uint64, ids [
 		}
 		return DashboardState{}, cause
 	}
-	for index, plan := range plans {
+	finalFiles := map[string]fixFileState{}
+	for _, step := range steps {
+		plan := step.plan
 		if err := ctx.Err(); err != nil {
+			return unwind(err)
+		}
+		if err := verifyFixFiles(step.before); err != nil {
 			return unwind(err)
 		}
 		transaction, err := fixes.Apply(ctx, plan, backupRoot, func(ctx context.Context, _ []string) error {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
+			if err := verifyFixFiles(step.after); err != nil {
+				return err
+			}
 			current, err := s.config.Scan(ctx)
 			if err != nil {
 				return err
 			}
-			remaining, err := fixes.Plan(current, nil)
-			if err != nil {
+			// A scan callback or concurrent writer must not replace our pinned
+			// output before it becomes the input to another selected transaction.
+			if err := verifyFixFiles(step.after); err != nil {
 				return err
-			}
-			for _, pending := range remaining {
-				if pending.ID == plan.ID {
-					return fmt.Errorf("fix postcondition is not satisfied")
-				}
 			}
 			raw = current
 			return ctx.Err()
@@ -221,38 +228,8 @@ func (s *Service) ApplyFixes(ctx context.Context, expectedRevision uint64, ids [
 			return unwind(err)
 		}
 		applied = append(applied, transaction.BackupID)
-		// Replan overlapping transactions against the verified result. Leave
-		// untouched targets pinned to their original hashes so concurrent edits
-		// still conflict instead of silently being accepted by a fresh plan.
-		if index+1 < len(plans) {
-			fresh, err := fixes.Plan(raw, nil)
-			if err != nil {
-				return unwind(err)
-			}
-			for next := index + 1; next < len(plans); next++ {
-				overlaps := false
-				for _, edit := range plans[next].Edits {
-					for _, path := range transaction.Paths {
-						if edit.TargetPath == path {
-							overlaps = true
-						}
-					}
-				}
-				if !overlaps {
-					continue
-				}
-				found := false
-				for _, candidate := range fresh {
-					if sameFixIntent(plans[next], candidate) {
-						plans[next] = candidate
-						found = true
-						break
-					}
-				}
-				if !found {
-					return unwind(fixes.ErrTargetChanged)
-				}
-			}
+		for path, file := range step.after {
+			finalFiles[path] = file
 		}
 	}
 	owned, state, err := s.prepare(raw, expectedRevision+1)
@@ -260,6 +237,9 @@ func (s *Service) ApplyFixes(ctx context.Context, expectedRevision uint64, ids [
 		return unwind(err)
 	}
 	if err := ctx.Err(); err != nil {
+		return unwind(err)
+	}
+	if err := verifyFixFiles(finalFiles); err != nil {
 		return unwind(err)
 	}
 	s.publish(owned, state)
@@ -499,21 +479,6 @@ func (s *Service) ListSnapshots(ctx context.Context) ([]snapshots.Metadata, erro
 		items[i].Path = ""
 	}
 	return items, err
-}
-
-// Match a selected fix after earlier edits shifted offsets (and therefore IDs).
-// Do not widen the selection to a different operation, source or replacement.
-func sameFixIntent(previous, next model.FixPlan) bool {
-	if next.Risk != model.RiskSafe || len(previous.Edits) != len(next.Edits) {
-		return false
-	}
-	for i, edit := range previous.Edits {
-		candidate := next.Edits[i]
-		if edit.TargetPath != candidate.TargetPath || edit.SourceID != candidate.SourceID || edit.Operation != candidate.Operation || edit.Replacement != candidate.Replacement || edit.ResultMode != candidate.ResultMode {
-			return false
-		}
-	}
-	return true
 }
 
 // Browser/report plans describe operations without publishing instruction bytes

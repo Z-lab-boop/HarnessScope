@@ -117,7 +117,9 @@ export class FixCenter {
   private async refresh(): Promise<void> {
     const state = this.store.get(); if (state.busy || !state.dashboard) return;
     const current = state.dashboard;
-    await this.mutate(async () => ({ ...current, fix_plans: await this.api.planFixes(current.revision) }), "Dry plan refreshed");
+    // A dry preview alone does not publish its IDs. Rescan keeps selectable
+    // plans and the server's authoritative revision in the same snapshot.
+    await this.mutate(() => this.api.rescan(current.revision), "Dry plan refreshed");
   }
 
   private async mutate(request: () => Promise<DashboardState>, success: string): Promise<void> {
