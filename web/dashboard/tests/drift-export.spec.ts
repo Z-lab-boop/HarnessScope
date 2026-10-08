@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 
 const fixture = JSON.parse(await readFile(new URL("./fixture-state.json", import.meta.url), "utf8"));
 fixture.result.analysis.graph.nodes = [{id:"node_codex_mcp",type:"MCP_SERVER",client:"codex",display_name:"Fixture MCP",adapter_confidence:"CONFIRMED"}];
+fixture.result.analysis.findings[0].graph_references = ["node_codex_mcp"];
 let server: Server, base: string, revision: number, names: string[], drift: unknown, calls: {path:string;body:any}[], failRefresh: boolean;
 const changes = [
   {kind:"CHANGED",entity_type:"FINDING",id:"PATH-0001:0123456789abcdef",summary:"ignored",before:"RAW_BEFORE_CANARY",after:"RAW_AFTER_CANARY"},
@@ -51,8 +52,25 @@ test("drift node and finding links open existing views and removed nodes stay ex
  await open(page);await page.getByRole("button",{name:"Compare baseline"}).click();
  await expect(page.getByText("Not in current snapshot",{exact:true})).toBeVisible();
  await page.getByRole("button",{name:"Inspect node node_codex_mcp"}).click();await expect(page).toHaveURL(/view=graph/);await expect(page.locator('[data-node-id="node_codex_mcp"]')).toHaveAttribute("aria-pressed","true");
- await page.getByRole("link",{name:"Drift"}).click();await page.getByRole("button",{name:"Inspect finding PATH-0001:0123456789abcdef"}).click();
+ await page.getByRole("link",{name:"Drift"}).click();await page.getByRole("button",{name:"View current findings for rule PATH-0001"}).click();
  await expect(page).toHaveURL(/view=findings/);await expect(page.getByRole("heading",{name:"Missing fixture command"})).toBeVisible();await expect(page.getByRole("heading",{name:"Client portability needs review"})).toHaveCount(0);
+});
+test("removed finding identity never links to a surviving same-rule finding",async({page})=>{
+ // Baseline A references a removed node; current B references node_codex_mcp.
+ // The server's fingerprints distinguish A and B even though their rule is shared.
+ const removedID="PATH-0001:aaaaaaaaaaaaaaaa",currentID="PATH-0001:bbbbbbbbbbbbbbbb";
+ drift={schema_version:"1.0.0",baseline:"base",changes:[
+  {kind:"REMOVED",entity_type:"FINDING",id:removedID,summary:"ignored",before:"RAW_REMOVED_CANARY"},
+  {kind:"CHANGED",entity_type:"FINDING",id:currentID,summary:"ignored",after:"RAW_CURRENT_CANARY"},
+ ]};
+ await open(page);
+ const removed=page.locator(".drift-row").filter({has:page.getByText(removedID,{exact:true})});
+ await expect(removed).toContainText("Not in current snapshot");await expect(removed.getByRole("button")).toHaveCount(0);
+ const current=page.locator(".drift-row").filter({has:page.getByText(currentID,{exact:true})});
+ await expect(current.getByRole("button",{name:"View current findings for rule PATH-0001"})).toBeVisible();
+ await expect(page.locator("body")).not.toContainText("RAW_");
+ await current.getByRole("button").click();await expect(page).toHaveURL(/view=findings/);
+ await expect(page.getByRole("heading",{name:"Missing fixture command"})).toBeVisible();
 });
 test("stale save never overwrites a baseline after automatic refresh",async({page})=>{
  await open(page);await page.getByLabel("Snapshot name").fill("new-base");revision=10;await page.getByRole("button",{name:"Save snapshot"}).click();

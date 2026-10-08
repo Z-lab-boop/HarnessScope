@@ -70,8 +70,10 @@ export class DriftView {
               row.append(button(`Inspect node ${change.id}`, () => this.actions.focusNode(change.id)));
             } else if (entity === "FINDING") {
               const rule = change.id.replace(/:[0-9a-f]{16}$/, "");
-              if (state.dashboard?.result.analysis.findings?.some((finding) => finding.rule_id === rule)) {
-                row.append(button(`Inspect finding ${change.id}`, () => {
+              // The existing Findings view indexes rules, not drift fingerprints.
+              // A surviving same-rule finding cannot stand in for a removed identity.
+              if (change.kind !== "REMOVED" && state.dashboard?.result.analysis.findings?.some((finding) => finding.rule_id === rule)) {
+                row.append(button(`View current findings for rule ${rule}`, () => {
                   const url = new URL(location.href); url.searchParams.set("view", "findings"); history.pushState(null, "", url.pathname + url.search);
                   this.store.update({ route: "findings", selection: null, views: { ...(this.store.get().views ?? initialViews()), findings: { ...emptyFilters(), text: rule } } });
                 }));
