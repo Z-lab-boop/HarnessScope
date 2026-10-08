@@ -50,6 +50,7 @@ const readme = "HarnessScope offline diagnostic bundle\n\nThis bundle is sanitiz
 var homePathPattern = regexp.MustCompile(`(?i)(?:/(?:Users|home)/|[A-Z]:[\\/](?:Users|Documents and Settings)[\\/])`)
 var versionToken = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$`)
 var metadataToken = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:+\[\]-]{0,127}$`)
+var findingIDToken = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:+\[\]-]{0,127}:[0-9a-f]{16}$`)
 var baselineName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 type Exporter struct{ clock func() time.Time }
@@ -178,7 +179,10 @@ func validateMetadata(input Input) error {
 		default:
 			return fmt.Errorf("invalid normalized drift entity")
 		}
-		if !metadataToken.MatchString(change.ID) || change.Summary != strings.ToLower(change.EntityType)+" "+change.ID+" "+strings.ToLower(change.Kind) {
+		// Compare appends a colon and 16-digit digest to a normalized RuleID
+		// of up to 128 characters. Only FINDING gets this extended grammar.
+		validID := metadataToken.MatchString(change.ID) || (change.EntityType == snapshots.EntityFinding && findingIDToken.MatchString(change.ID))
+		if !validID || change.Summary != strings.ToLower(change.EntityType)+" "+change.ID+" "+strings.ToLower(change.Kind) {
 			return fmt.Errorf("invalid normalized drift identifier or summary")
 		}
 		for _, client := range change.Clients {

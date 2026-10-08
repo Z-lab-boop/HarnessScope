@@ -10,6 +10,7 @@ import (
 	"errors"
 	"io"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -285,6 +286,49 @@ func TestBundleAcceptsNormalizedSnapshotDrift(t *testing.T) {
 	}
 	if !reflect.DeepEqual(stored, drift) {
 		t.Fatal("normalized drift changed during export")
+	}
+}
+
+func TestBundleAcceptsLongSynthesizedFindingIDs(t *testing.T) {
+	for _, ruleLength := range []int{111, 112, 128} {
+		t.Run("rule_length_"+strconv.Itoa(ruleLength), func(t *testing.T) {
+			input := bundleInput()
+			input.Report.Analysis.Findings = []model.Finding{{RuleID: strings.Repeat("R", ruleLength), Severity: model.SeverityHigh, Evidence: model.EvidenceConfirmed, AffectedClients: []string{"codex"}}}
+			baseline := input.Report
+			baseline.Analysis.Findings = nil
+			drift := snapshots.Compare(input.Report, baseline)
+			if len(drift.Changes) != 1 || drift.Changes[0].EntityType != snapshots.EntityFinding || len(drift.Changes[0].ID) != ruleLength+17 {
+				t.Fatalf("unexpected synthesized finding ID: %#v", drift)
+			}
+			input.Drift = &drift
+			var output bytes.Buffer
+			if _, err := New(nil).Write(context.Background(), &output, input); err != nil {
+				t.Fatal(err)
+			}
+			files := readBundle(t, output.Bytes())
+			var stored snapshots.Diff
+			if err := json.Unmarshal(files["drift.json"], &stored); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(stored, drift) {
+				t.Fatal("long finding ID changed during export")
+			}
+		})
+	}
+}
+
+func TestBundleRejectsMalformedExtendedFindingIDs(t *testing.T) {
+	for _, id := range []string{
+		strings.Repeat("R", 129) + ":0123456789abcdef",
+		strings.Repeat("R", 128) + ":gggggggggggggggg",
+		"/private/build/project" + strings.Repeat("R", 128) + ":0123456789abcdef",
+	} {
+		input := bundleInput()
+		input.Drift = &snapshots.Diff{SchemaVersion: "1.0.0", Changes: []snapshots.Change{{Kind: "ADDED", EntityType: "FINDING", ID: id, Summary: "finding " + id + " added"}}}
+		var output bytes.Buffer
+		if _, err := New(nil).Write(context.Background(), &output, input); err == nil || output.Len() != 0 {
+			t.Fatalf("malformed extended finding ID accepted: %v", err)
+		}
 	}
 }
 
