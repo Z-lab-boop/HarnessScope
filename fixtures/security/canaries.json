@@ -1,0 +1,6 @@
+{
+  "api_key": "sk-test-HARNESSSCOPE-CANARY-1234567890",
+  "github_token": "ghp_HARNESSSCOPE_CANARY_1234567890",
+  "authorization": "Bearer HARNESSSCOPE-CANARY-1234567890",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nHARNESSSCOPE-CANARY\n-----END PRIVATE KEY-----"
+}
