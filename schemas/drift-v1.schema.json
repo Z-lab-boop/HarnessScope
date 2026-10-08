@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://harnessscope.dev/schemas/drift-v1.schema.json",
+  "title": "HarnessScope normalized configuration drift v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "changes"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "baseline": { "type": "string" },
+    "changes": { "type": "array", "items": { "$ref": "#/$defs/change" } }
+  },
+  "$defs": {
+    "change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "entity_type", "id", "summary"],
+      "properties": {
+        "kind": { "enum": ["ADDED", "REMOVED", "CHANGED"] },
+        "entity_type": { "enum": ["CLIENT", "SOURCE", "NODE", "FINDING", "COMPATIBILITY"] },
+        "id": { "type": "string" },
+        "summary": { "type": "string" },
+        "clients": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}
