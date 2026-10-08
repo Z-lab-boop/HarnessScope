@@ -51,6 +51,7 @@ func ExecuteWithRuntime(ctx context.Context, args []string, stdout, stderr io.Wr
 func newRootCommand(runtime *Runtime, stdout, stderr io.Writer) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "hscope",
+		Version:       runtime.ToolVersion,
 		Short:         "See what your coding agent actually loads",
 		SilenceUsage:  true,
 		SilenceErrors: true,

@@ -14,6 +14,7 @@ import (
 	"github.com/Z-lab-boop/harnessscope/internal/adapters/cursor"
 	"github.com/Z-lab-boop/harnessscope/internal/adapters/opencode"
 	"github.com/Z-lab-boop/harnessscope/internal/analyzers"
+	"github.com/Z-lab-boop/harnessscope/internal/buildinfo"
 	"github.com/Z-lab-boop/harnessscope/internal/discovery"
 	"github.com/Z-lab-boop/harnessscope/internal/model"
 	"github.com/Z-lab-boop/harnessscope/internal/resolver"
@@ -57,7 +58,7 @@ func DefaultRuntime() (*Runtime, error) {
 		OpenPath:    platformOpen(env.GOOS),
 		OpenBrowser: platformOpen(env.GOOS),
 		StartServer: startServer,
-		ToolVersion: "0.2.0",
+		ToolVersion: buildinfo.Version,
 	}, nil
 }
 

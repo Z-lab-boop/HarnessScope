@@ -42,6 +42,7 @@ hscope snapshot save <name> [path]
 hscope snapshot list
 hscope snapshot diff <name> [path]
 hscope export [path] --output diagnostic.zip [--baseline <name>] [--force]
+hscope --version                  # stamped release version, or 0.2.0-dev from source
 ```
 
 ## Local control center

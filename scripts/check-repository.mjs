@@ -9,7 +9,7 @@ for (const file of readdirSync("schemas").filter((name) => name.endsWith(".json"
   assert.equal(schema.additionalProperties, false, file);
   assert.ok(schema.$schema && schema.$id, file);
 }
-const allowed = /^(fixtures\/|demo\/conflicted-workspace\/|demo\/run\.sh$|internal\/.+_test\.go$|scripts\/(smoke-release\.sh|check-repository\.mjs)$|docs\/|README|CONTRIBUTING\.md$|SECURITY\.md$|THIRD_PARTY_NOTICES\.md$|\.github\/workflows\/ci\.yml$)/;
+const allowed = /^(fixtures\/|demo\/conflicted-workspace\/|demo\/run\.sh$|internal\/.+_test\.go$|scripts\/(smoke-release\.sh|check-release-archive\.sh|check-repository\.mjs)$|docs\/|README|CONTRIBUTING\.md$|SECURITY\.md$|THIRD_PARTY_NOTICES\.md$|\.github\/workflows\/ci\.yml$)/;
 const files = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" }).split("\0").filter(Boolean);
 for (const file of files) {
   if (file.startsWith(".superpowers/")) continue; // local implementation notes, not shipped artifacts

@@ -38,6 +38,7 @@ hscope snapshot save <名称> [path]
 hscope snapshot list
 hscope snapshot diff <名称> [path]
 hscope export [path] --output diagnostic.zip [--baseline <名称>] [--force]
+hscope --version                  # 发布构建版本；源码构建显示 0.2.0-dev
 ```
 
 仓库内置合成演示：

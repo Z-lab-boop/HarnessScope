@@ -292,6 +292,14 @@ test("reviewed Linux dashboard visual baseline", async ({ page }) => {
   await expect(page).toHaveScreenshot("dashboard-linux.png", { fullPage: true, maxDiffPixelRatio: 0.03 });
 });
 
+test("reviewed Linux Graph visual baseline", async ({ page }) => {
+  test.skip(process.platform !== "linux" || process.env.HARNESSSCOPE_REVIEWED_LINUX_BASELINE !== "1", "OPEN: no reviewed Linux Graph baseline; see docs/visual-baselines.md");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(`${base}/?view=graph#token=${token}`);
+  await expect(page.locator("[data-node-id]")).toHaveCount(7);
+  await expect(page).toHaveScreenshot("graph-linux.png", { fullPage: true, maxDiffPixelRatio: 0.03 });
+});
+
 test("dashboard source avoids HTML string injection sinks", async () => {
   const directory = new URL("../src/", import.meta.url);
   const entries = await readdir(directory).catch(() => []);

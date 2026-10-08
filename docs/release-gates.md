@@ -1,6 +1,8 @@
 # v0.2 release gates
 
-Local candidates are supported for darwin/linux × amd64/arm64. Functional CI runs on macOS and Linux; release publication also requires the separate reviewed-Linux visual job. That visual gate is **OPEN** because there are no reviewed Linux image baselines. Cross-compilation and macOS browser success do not close it. No repository creation, push, tag or publication is performed by local scripts.
+Local candidates are supported for darwin/linux × amd64/arm64. Functional CI runs on macOS and Linux; release publication also requires the separate reviewed-Linux visual job. That visual gate is **OPEN** because reviewed report, Overview and Graph baselines are absent. Ordinary push/PR CI shows a non-blocking OPEN warning; reusable publication CI sets `strict_release: true` and fails closed. When all baselines exist, ordinary CI compares them too. Cross-compilation and macOS browser success do not close this gate. No repository creation, push, tag or publication is performed by local scripts.
+
+Archives use the explicit `scripts/release-files.txt` allowlist; internal design/plan directories are excluded. Each archive is checked for exact regular-file membership, freshly extracted, and scanned for personal paths and synthetic canaries. The shared local/GitHub builder strips an optional leading `v` from the requested version and injects it through `internal/buildinfo.Version`; `hscope --version`, Runtime and CLI/browser ZIP manifests share that value. Unstamped source builds identify as `0.2.0-dev`.
 
 ## Reproduce the local gates
 
@@ -26,6 +28,7 @@ for script in scripts/*.sh demo/*.sh; do sh -n "$script"; done
 ./scripts/smoke-release.sh ./bin/hscope
 ./scripts/check-third-party-notices.sh
 node scripts/check-notices-test.mjs
+node --test scripts/release-gates.test.mjs
 ./demo/run.sh
 node scripts/check-demo-lifecycle.mjs
 git diff --check
@@ -34,7 +37,8 @@ output=$(mktemp -d)
 (cd "$output" && shasum -a 256 -c SHA256SUMS)
 unpack=$(mktemp -d)
 tar -C "$unpack" -xzf "$output/harnessscope_v0.2.0_$(go env GOOS)_$(go env GOARCH).tar.gz"
-./scripts/smoke-release.sh "$unpack/hscope"
+./scripts/check-release-archive.sh "$output/harnessscope_v0.2.0_$(go env GOOS)_$(go env GOARCH).tar.gz"
+./scripts/smoke-release.sh "$unpack/hscope" v0.2.0
 ```
 
 Install a browser with `(cd web && npx playwright install chromium)` if necessary. If cached Chromium is absent but Chrome is installed, `PLAYWRIGHT_CHANNEL=chrome` is supported by both suites; record the actual platform/browser, never call that a Linux baseline. Linux CI installs its locked Chromium. A skipped visual test is not a passing comparison. See [baseline procedure](visual-baselines.md).

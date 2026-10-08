@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
   workflow_call:
+    inputs:
+      strict_release:
+        description: Require the reviewed Linux visual baseline set before publication
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -39,6 +44,7 @@ jobs:
       - run: ./scripts/smoke-release.sh ./bin/hscope
       - run: ./scripts/check-third-party-notices.sh
       - run: node scripts/check-notices-test.mjs
+      - run: node --test scripts/release-gates.test.mjs
       - run: ./demo/run.sh
       - run: node scripts/check-demo-lifecycle.mjs
       - if: runner.os == 'Linux'
@@ -58,7 +64,7 @@ jobs:
           os=$(go env GOOS)
           arch=$(go env GOARCH)
           tar -C "$unpack" -xzf "$output/harnessscope_v0.2.0-ci_${os}_${arch}.tar.gz"
-          ./scripts/smoke-release.sh "$unpack/hscope"
+          ./scripts/smoke-release.sh "$unpack/hscope" v0.2.0-ci
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -78,23 +84,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Require reviewed Linux artifacts (currently OPEN)
-        run: |
-          test -f web/tests/__snapshots__/report-linux.png && test -f web/dashboard/tests/__snapshots__/dashboard-linux.png || {
-            echo '::error::OPEN: reviewed Linux visual baselines are absent; see docs/visual-baselines.md'
-            exit 1
-          }
+      - name: Check reviewed Linux artifacts (OPEN until reviewed)
+        id: baselines
+        env:
+          HARNESSSCOPE_STRICT_RELEASE: ${{ inputs.strict_release || false }}
+        run: ./scripts/check-visual-baselines.sh
       - uses: actions/setup-go@v5
+        if: steps.baselines.outputs.available == 'true'
         with:
           go-version: '1.24.x'
       - uses: actions/setup-node@v4
+        if: steps.baselines.outputs.available == 'true'
         with:
           node-version: '22'
       - run: npm --prefix web ci
+        if: steps.baselines.outputs.available == 'true'
       - run: npm --prefix web run build
+        if: steps.baselines.outputs.available == 'true'
       - run: go build -trimpath -o bin/hscope ./cmd/hscope
+        if: steps.baselines.outputs.available == 'true'
       - run: npx --prefix web playwright install --with-deps chromium
+        if: steps.baselines.outputs.available == 'true'
       - name: Compare reviewed Linux images; never generate during release
+        if: steps.baselines.outputs.available == 'true'
         env:
           HARNESSSCOPE_REVIEWED_LINUX_BASELINE: '1'
         run: |

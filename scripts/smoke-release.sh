@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-if [ "$#" -ne 1 ]; then
-  printf 'usage: %s /path/to/hscope\n' "$0" >&2
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+  printf 'usage: %s /path/to/hscope [expected-version]\n' "$0" >&2
   exit 2
 fi
 
@@ -10,6 +10,9 @@ case "$1" in
   /*) binary=$1 ;;
   *) binary=$(CDPATH= cd -- "$(dirname -- "$1")" && pwd)/$(basename -- "$1") ;;
 esac
+expected_version=${2:-0.2.0-dev}
+expected_version=${expected_version#v}
+test "$("$binary" --version)" = "hscope version $expected_version"
 smoke_root=$(mktemp -d "${TMPDIR:-/tmp}/harnessscope-smoke.XXXXXX")
 smoke_root=$(CDPATH= cd -- "$smoke_root" && pwd -P)
 server_pid=
@@ -56,6 +59,7 @@ grep -Eq '"changes":[[:space:]]*\[\]' "$smoke_root/drift.json"
 unzip -t "$smoke_root/diagnostic.zip" >/dev/null
 mkdir "$smoke_root/bundle"
 unzip -q "$smoke_root/diagnostic.zip" -d "$smoke_root/bundle"
+grep -Fq "\"tool_version\": \"$expected_version\"" "$smoke_root/bundle/manifest.json"
 "$binary" serve "$smoke_root/workspace" --client cursor --port 0 >"$smoke_root/launch.txt" 2>"$smoke_root/server.log" &
 server_pid=$!
 attempt=0
@@ -76,6 +80,11 @@ for route in state explain compare backups snapshots fixes/plan fixes/apply roll
 done
 curl --noproxy '*' --fail --silent -H "X-HarnessScope-Token: $token" "$base/api/v1/state" >"$smoke_root/state.json"
 grep -q '"revision"' "$smoke_root/state.json"
+revision=$(sed -n 's/.*"revision":[ ]*\([0-9][0-9]*\).*/\1/p' "$smoke_root/state.json")
+curl --noproxy '*' --fail --silent -H "X-HarnessScope-Token: $token" -H "Origin: $base" -H 'Content-Type: application/json' \
+  --data "{\"revision\":$revision}" "$base/api/v1/export" >"$smoke_root/browser.zip"
+unzip -p "$smoke_root/browser.zip" manifest.json >"$smoke_root/browser-manifest.json"
+grep -Fq "\"tool_version\": \"$expected_version\"" "$smoke_root/browser-manifest.json"
 curl --noproxy '*' --fail --silent "$base/" >"$smoke_root/dashboard.html"
 grep -q 'dashboard.js' "$smoke_root/dashboard.html"
 if grep -RE 'HARNESSSCOPE-CANARY|/Users/|/home/[^/]+/' "$smoke_root/bundle" "$smoke_root/state.json" "$smoke_root/server.log"; then exit 1; fi
