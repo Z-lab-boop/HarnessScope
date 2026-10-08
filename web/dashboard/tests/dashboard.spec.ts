@@ -10,6 +10,7 @@ const assets = new URL("../../../internal/server/assets/", import.meta.url);
 let server: Server;
 let base: string;
 let mode = "ok";
+let serverRevision = fixture.revision;
 let calls: { path: string; token: string | undefined; body: string }[] = [];
 let requests: { method: string; url: string }[] = [];
 
@@ -36,13 +37,26 @@ test.beforeAll(async () => {
         res.statusCode = 401;
         res.end(JSON.stringify({ code: "unauthorized", message: "Session is no longer valid.", details: {} }));
       } else {
+        if (path === "/api/v1/rescan") {
+          if (JSON.parse(body).revision !== serverRevision) {
+            res.statusCode = 409;
+            res.end(JSON.stringify({ code: "stale_revision", message: "The dashboard revision changed. Refresh and retry.", details: {} }));
+            return;
+          }
+          serverRevision++;
+        }
+        if (path === "/api/v1/state" && mode === "refresh-fails") {
+          res.statusCode = 503;
+          res.end(JSON.stringify({ code: "unavailable", message: "The local snapshot is temporarily unavailable.", details: {} }));
+          return;
+        }
         if (path.endsWith("export")) { res.setHeader("Content-Type", "application/zip"); res.end(Buffer.from([80, 75, 3, 4])); return; }
         if (["/api/v1/backups", "/api/v1/fixes/plan"].includes(path) || (path === "/api/v1/snapshots" && req.method === "GET")) { res.end("[]"); return; }
         if (path === "/api/v1/snapshots") { res.end(JSON.stringify({ name: "base", schema_version: "1.0.0", created_at: fixture.scanned_at })); return; }
         if (path === "/api/v1/explain") { res.end(JSON.stringify({ node: { id: "node-a", type: "CLIENT", client: "codex", display_name: "codex", adapter_confidence: "CONFIRMED" }, edges: [] })); return; }
         if (path === "/api/v1/compare") { res.end(JSON.stringify({ left: "codex", right: "opencode", rows: [] })); return; }
         const data = structuredClone(fixture);
-        if (path.endsWith("rescan")) data.revision = 8;
+        data.revision = serverRevision;
         if (mode === "empty") {
           data.result.analysis = { clients: null, sources: null, graph: { nodes: null, edges: null }, findings: null };
         }
@@ -62,7 +76,7 @@ test.beforeAll(async () => {
   base = `http://127.0.0.1:${address.port}`;
 });
 test.afterAll(async () => { await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())); });
-test.beforeEach(() => { mode = "ok"; calls = []; requests = []; });
+test.beforeEach(() => { mode = "ok"; serverRevision = fixture.revision; calls = []; requests = []; });
 
 test("consumes the fragment once, authenticates same-origin requests, and keeps the token out of storage", async ({ page }) => {
   const requests: string[] = [];
@@ -101,6 +115,50 @@ test("renders snapshot risk cards, client evidence tiers and navigable shell lan
   }
   await page.goBack();
   await expect(page.getByRole("link", { name: "Export", exact: true })).toHaveAttribute("aria-current", "page");
+});
+
+test("stale revision refreshes the authenticated snapshot and waits for an explicit retry", async ({ page }) => {
+  const urls: string[] = [];
+  page.on("request", (request) => urls.push(request.url()));
+  await page.goto(`${base}/#token=${token}`);
+  await expect(page.getByText("REV 7", { exact: true })).toBeVisible();
+  // An independent client advances the server after this page loaded its snapshot.
+  serverRevision = 11;
+  await page.getByRole("button", { name: "Rescan workspace" }).click();
+  await expect(page.getByText("REV 11", { exact: true })).toBeVisible();
+  await expect(page.getByRole("alert")).toContainText("Review the refreshed snapshot and retry");
+  await expect(page.getByRole("status")).toContainText("Scan revision 11 loaded");
+  expect(calls).toEqual([
+    { path: "/api/v1/state", token, body: "" },
+    { path: "/api/v1/rescan", token, body: '{"revision":7}' },
+    { path: "/api/v1/state", token, body: "" },
+  ]);
+  expect(serverRevision).toBe(11);
+  expect(new URL(page.url()).hash).toBe("");
+  expect(urls.every((url) => new URL(url).origin === base && !url.includes(token))).toBe(true);
+  expect(await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length, cookie: document.cookie }))).toEqual({ local: 0, session: 0, cookie: "" });
+  await page.getByRole("button", { name: "Rescan workspace" }).click();
+  await expect(page.getByText("REV 12", { exact: true })).toBeVisible();
+  expect(calls[3]).toEqual({ path: "/api/v1/rescan", token, body: '{"revision":11}' });
+  await expect(page.getByRole("alert")).toBeHidden();
+});
+
+test("stale revision refresh failure stays recoverable without replaying the mutation", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto(`${base}/#token=${token}`);
+  await expect(page.getByText("REV 7", { exact: true })).toBeVisible();
+  serverRevision = 11;
+  mode = "refresh-fails";
+  await page.getByRole("button", { name: "Rescan workspace" }).click();
+  await expect(page.getByRole("alert")).toContainText("temporarily unavailable");
+  await expect(page.getByRole("button", { name: "Rescan workspace" })).toBeEnabled();
+  expect(calls.map((call) => call.path)).toEqual(["/api/v1/state", "/api/v1/rescan", "/api/v1/state"]);
+  expect(serverRevision).toBe(11);
+  mode = "ok";
+  await page.getByRole("button", { name: "Rescan workspace" }).click();
+  await expect(page.getByText("REV 11", { exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
 });
 
 test("keyboard reaches the workbench and selection inspector with visible focus", async ({ page }) => {

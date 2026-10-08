@@ -1,4 +1,4 @@
-import { APIClient, consumeFragmentToken } from "./api.js";
+import { APIClient, APIError, consumeFragmentToken } from "./api.js";
 import { Store } from "./store.js";
 import type { DashboardState, Route, UIState } from "./types.js";
 
@@ -207,6 +207,18 @@ async function load(rescanning = false): Promise<void> {
     store.update({ dashboard, busy: false, selection: null });
     toast.textContent = `Scan revision ${dashboard.revision} loaded.`;
   } catch (error) {
+    if (error instanceof APIError && error.code === "stale_revision") {
+      try {
+        // Reuse the authenticated client, but never replay a rejected mutation.
+        const dashboard = await api.state();
+        store.update({ dashboard, busy: false, selection: null, error: "The workspace changed. Review the refreshed snapshot and retry the action." });
+        toast.textContent = `Scan revision ${dashboard.revision} loaded. The rejected action was not repeated.`;
+        return;
+      } catch (refreshError) {
+        store.update({ busy: false, error: `The snapshot changed, but refresh failed. ${refreshError instanceof Error ? refreshError.message : "Retry when the local server is available."}` });
+        return;
+      }
+    }
     store.update({ busy: false, error: error instanceof Error ? error.message : "Unable to load the local scan." });
   }
 }
