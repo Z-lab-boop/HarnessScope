@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://harnessscope.dev/schemas/bundle-manifest-v1.schema.json",
+  "title": "HarnessScope diagnostic bundle manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "tool_version", "generated_at", "clients", "members"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "tool_version": { "type": "string", "minLength": 1 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "clients": { "type": "array", "items": { "$ref": "#/$defs/client" } },
+    "members": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/member" },
+      "allOf": [
+        { "contains": { "properties": { "name": { "const": "README.txt" } }, "required": ["name"] }, "minContains": 1, "maxContains": 1 },
+        { "contains": { "properties": { "name": { "const": "report.html" } }, "required": ["name"] }, "minContains": 1, "maxContains": 1 },
+        { "contains": { "properties": { "name": { "const": "report.json" } }, "required": ["name"] }, "minContains": 1, "maxContains": 1 },
+        { "contains": { "properties": { "name": { "const": "drift.json" } }, "required": ["name"] }, "minContains": 0, "maxContains": 1 }
+      ]
+    }
+  },
+  "$defs": {
+    "client": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tier"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "tier": { "enum": ["VERIFIED", "PREVIEW"] }
+      }
+    },
+    "member": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "sha256"],
+      "properties": {
+        "name": { "enum": ["README.txt", "drift.json", "report.html", "report.json"] },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    }
+  }
+}
