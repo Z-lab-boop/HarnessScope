@@ -3,8 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild src/report.ts --bundle --minify --outfile=../internal/report/assets/report.js && esbuild src/report.css --bundle --minify --outfile=../internal/report/assets/report.css",
-    "test:visual": "playwright test"
+    "build:report": "esbuild src/report.ts --bundle --minify --outfile=../internal/report/assets/report.js && esbuild src/report.css --bundle --minify --outfile=../internal/report/assets/report.css",
+    "build:dashboard": "esbuild dashboard/src/app.ts --bundle --minify --target=es2020 --outfile=../internal/server/assets/dashboard.js && esbuild dashboard/src/dashboard.css --bundle --minify --outfile=../internal/server/assets/dashboard.css && node -e \"require('node:fs').copyFileSync('dashboard/index.html', '../internal/server/assets/index.html')\"",
+    "build": "npm run build:report && npm run build:dashboard",
+    "test:visual": "playwright test",
+    "test:dashboard": "playwright test --config dashboard/playwright.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",

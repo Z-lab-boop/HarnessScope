@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0.0",
+  "revision": 7,
+  "scanned_at": "2026-10-08T10:24:00Z",
+  "workspace": "./synthetic-workspace",
+  "result": {
+    "schema_version": "1.0.0",
+    "analysis": {
+      "clients": [
+        {
+          "id": "codex",
+          "detection": { "installed": true, "version": "fixture" },
+          "capabilities": { "precedence": true, "instructions": true, "skills": true, "hooks": true, "mcp": true },
+          "compatibility": { "tier": "VERIFIED", "state": "VERIFIED", "ruleset_version": "fixture", "last_verification_at": "2026-10-08" },
+          "effective": { "client": "codex", "sources": [], "nodes": [], "edges": [], "findings": [] }
+        },
+        {
+          "id": "opencode",
+          "detection": { "installed": false },
+          "capabilities": { "precedence": false, "instructions": true, "skills": false, "hooks": false, "mcp": true },
+          "compatibility": { "tier": "PREVIEW", "state": "COMPATIBILITY_UNKNOWN", "ruleset_version": "fixture", "last_verification_at": "2026-10-08" },
+          "effective": { "client": "opencode", "sources": [], "nodes": [], "edges": [], "findings": [], "limitations": ["Preview adapter; precedence is not verified."] }
+        }
+      ],
+      "sources": [],
+      "graph": { "nodes": [], "edges": [] },
+      "findings": [
+        { "rule_id": "PATH-0001", "severity": "HIGH", "evidence": "CONFIRMED", "summary": "Missing fixture command", "reason": "The configured path does not exist.", "impact": "The server cannot start.", "remediation": "Restore the fixture command.", "affected_clients": ["codex"] },
+        { "rule_id": "PORT-0001", "severity": "MEDIUM", "evidence": "LIKELY", "summary": "Client portability needs review", "reason": "Preview support is limited.", "impact": "Behavior may differ.", "remediation": "Review client support.", "affected_clients": ["opencode"] }
+      ],
+      "context": [{ "client": "codex", "source_id": "source-fixture", "category": "instructions", "bytes": 2400, "code_points": 1800, "min_tokens": 450, "max_tokens": 900, "method": "character estimate" }]
+    }
+  },
+  "fix_plans": [],
+  "backups": []
+}

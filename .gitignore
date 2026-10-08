@@ -4,4 +4,5 @@
 /.hscope-test/
 /web/node_modules/
 /web/test-results/
+/.zerotoken/
 .DS_Store
