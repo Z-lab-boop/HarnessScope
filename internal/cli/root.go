@@ -64,6 +64,7 @@ func newRootCommand(runtime *Runtime, stdout, stderr io.Writer) *cobra.Command {
 		newReportCommand(stdout),
 		newFixCommand(runtime, stdout),
 		newRollbackCommand(runtime, stdout),
+		newServeCommand(runtime, stdout, stderr),
 	)
 	return root
 }

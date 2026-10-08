@@ -18,12 +18,22 @@ import (
 	"github.com/Z-lab-boop/harnessscope/internal/model"
 	"github.com/Z-lab-boop/harnessscope/internal/resolver"
 	"github.com/Z-lab-boop/harnessscope/internal/secrets"
+	"github.com/Z-lab-boop/harnessscope/internal/server"
 )
 
 type Runtime struct {
 	Registry    *adapters.Registry
 	Environment discovery.Environment
 	OpenPath    func(context.Context, string) error
+	OpenBrowser func(context.Context, string) error
+	StartServer func(context.Context, server.HTTPConfig) (ServerInstance, error)
+	ToolVersion string
+}
+
+type ServerInstance interface {
+	URL() string
+	Wait() error
+	Close(context.Context) error
 }
 
 type ScanOptions struct {
@@ -45,7 +55,14 @@ func DefaultRuntime() (*Runtime, error) {
 		),
 		Environment: env,
 		OpenPath:    platformOpen(env.GOOS),
+		OpenBrowser: platformOpen(env.GOOS),
+		StartServer: startServer,
+		ToolVersion: "0.2.0",
 	}, nil
+}
+
+func startServer(ctx context.Context, config server.HTTPConfig) (ServerInstance, error) {
+	return server.Start(ctx, config)
 }
 
 func platformOpen(goos string) func(context.Context, string) error {
