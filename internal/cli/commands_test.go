@@ -121,17 +121,21 @@ func TestScanWritesDefaultReportsToAppData(t *testing.T) {
 	}
 }
 
-func TestScanReportsCollapseHomePaths(t *testing.T) {
+func TestScanReportsCollapseHomeAndWorkspacePaths(t *testing.T) {
 	home := t.TempDir()
 	workspace := filepath.Join(home, "project")
 	if err := os.MkdirAll(workspace, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	homeNode := model.ConfigNode{
-		ID: "home_node", Client: "codex", Type: model.NodeInstruction, DisplayName: "home instruction", AdapterConfidence: model.EvidenceConfirmed,
+		ID: "home_node", Client: "codex", Type: model.NodeInstruction, DisplayName: filepath.Join(home, ".codex", "AGENTS.md"), AdapterConfidence: model.EvidenceConfirmed,
 		Origins: []model.Origin{{SourceID: "source_codex", LogicalPath: filepath.Join(home, ".codex", "AGENTS.md"), Scope: model.ScopeUser, Rule: "fixture"}},
 	}
-	runtime := fixtureRuntime(t, commandFixtureAdapter{id: "codex", nodes: []model.ConfigNode{homeNode}})
+	workspaceNode := model.ConfigNode{
+		ID: "workspace_node", Client: "codex", Type: model.NodeInstruction, DisplayName: filepath.Join(workspace, "AGENTS.md"), AdapterConfidence: model.EvidenceConfirmed,
+		Origins: []model.Origin{{SourceID: "source_codex", LogicalPath: filepath.Join(workspace, "AGENTS.md"), Scope: model.ScopeProject, Rule: "fixture"}},
+	}
+	runtime := fixtureRuntime(t, commandFixtureAdapter{id: "codex", nodes: []model.ConfigNode{homeNode, workspaceNode}})
 	runtime.Environment.HomeDir = home
 	runtime.Environment.AppDataDir = filepath.Join(home, "appdata")
 	var stdout, stderr bytes.Buffer
@@ -150,8 +154,13 @@ func TestScanReportsCollapseHomePaths(t *testing.T) {
 		if readErr != nil {
 			t.Fatal(readErr)
 		}
-		if strings.Contains(string(data), home) {
-			t.Fatalf("home path leaked in %s", name)
+		if strings.Contains(string(data), home) || strings.Contains(string(data), workspace) {
+			t.Fatalf("absolute path leaked in %s", name)
+		}
+		for _, want := range []string{"~/.codex/AGENTS.md", "./AGENTS.md"} {
+			if !strings.Contains(string(data), want) {
+				t.Fatalf("collapsed path %q missing in %s", want, name)
+			}
 		}
 	}
 }
