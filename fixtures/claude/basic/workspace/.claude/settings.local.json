@@ -1,0 +1,13 @@
+{
+  "theme": "local",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {"type": "command", "command": "./scripts/check.sh"}
+        ]
+      }
+    ]
+  }
+}

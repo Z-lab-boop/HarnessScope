@@ -1,0 +1,6 @@
+{
+  "theme": "dark",
+  "env": {
+    "API_KEY": "sk-test-HARNESSSCOPE-CANARY-1234567890"
+  }
+}

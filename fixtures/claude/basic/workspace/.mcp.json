@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "fixture-mcp",
+      "args": ["--fixture"]
+    }
+  }
+}
