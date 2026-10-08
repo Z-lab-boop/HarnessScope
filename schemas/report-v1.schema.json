@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://harnessscope.dev/schemas/report-v1.schema.json",
+  "title": "HarnessScope report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "analysis": { "$ref": "#/$defs/analysis" },
+    "run_metadata": { "$ref": "#/$defs/run_metadata" }
+  },
+  "$defs": {
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clients", "sources", "graph", "findings"],
+      "properties": {
+        "clients": { "type": "array", "items": { "$ref": "#/$defs/client" } },
+        "sources": { "type": "array", "items": { "$ref": "#/$defs/source" } },
+        "graph": { "$ref": "#/$defs/graph" },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+        "context": { "type": "array", "items": { "$ref": "#/$defs/context" } },
+        "fix_plans": { "type": "array", "items": { "$ref": "#/$defs/fix_plan" } }
+      }
+    },
+    "client": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "detection", "capabilities", "compatibility", "effective"],
+      "properties": {
+        "id": { "type": "string" },
+        "detection": { "type": "object" },
+        "capabilities": { "type": "object" },
+        "compatibility": { "type": "object" },
+        "effective": { "type": "object" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "logical_path", "client", "scope", "format", "exists", "readable", "kind", "discovery_reason", "symlink"],
+      "properties": {
+        "id": { "type": "string" },
+        "logical_path": { "type": "string" },
+        "canonical_path": { "type": "string" },
+        "client": { "type": "string" },
+        "scope": { "type": "string" },
+        "format": { "type": "string" },
+        "exists": { "type": "boolean" },
+        "readable": { "type": "boolean" },
+        "kind": { "type": "string" },
+        "discovery_reason": { "type": "string" },
+        "symlink": { "type": "boolean" }
+      }
+    },
+    "origin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "scope", "rule"],
+      "properties": {
+        "source_id": { "type": "string" },
+        "logical_path": { "type": "string" },
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 },
+        "field_path": { "type": "string" },
+        "scope": { "type": "string" },
+        "precedence_rank": { "type": "integer" },
+        "rule": { "type": "string" }
+      }
+    },
+    "safe_value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "display", "present"],
+      "properties": {
+        "kind": { "type": "string" },
+        "display": { "type": "string" },
+        "secret_category": { "type": "string" },
+        "present": { "type": "boolean" }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "client", "display_name", "adapter_confidence"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "client": { "type": "string" },
+        "display_name": { "type": "string" },
+        "attributes": { "type": "object", "additionalProperties": { "$ref": "#/$defs/safe_value" } },
+        "origins": { "type": "array", "items": { "$ref": "#/$defs/origin" } },
+        "load_condition": { "type": "string" },
+        "adapter_confidence": { "enum": ["CONFIRMED", "LIKELY", "UNKNOWN"] }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "from", "to", "type", "ruleset", "evidence"],
+      "properties": {
+        "id": { "type": "string" },
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "type": { "type": "string" },
+        "ruleset": { "type": "string" },
+        "evidence": { "enum": ["CONFIRMED", "LIKELY", "UNKNOWN"] },
+        "origin": { "$ref": "#/$defs/origin" }
+      }
+    },
+    "graph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodes", "edges"],
+      "properties": {
+        "nodes": { "type": "array", "items": { "$ref": "#/$defs/node" } },
+        "edges": { "type": "array", "items": { "$ref": "#/$defs/edge" } }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule_id", "severity", "evidence", "summary", "reason", "impact", "remediation"],
+      "properties": {
+        "rule_id": { "type": "string" },
+        "severity": { "enum": ["HIGH", "MEDIUM", "LOW", "INFO"] },
+        "evidence": { "enum": ["CONFIRMED", "LIKELY", "UNKNOWN"] },
+        "summary": { "type": "string" },
+        "reason": { "type": "string" },
+        "impact": { "type": "string" },
+        "affected_clients": { "type": "array", "items": { "type": "string" } },
+        "origins": { "type": "array", "items": { "$ref": "#/$defs/origin" } },
+        "graph_references": { "type": "array", "items": { "type": "string" } },
+        "remediation": { "type": "string" },
+        "fix_plan_id": { "type": "string" }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["client", "source_id", "category", "bytes", "code_points", "min_tokens", "max_tokens", "method"],
+      "properties": {
+        "client": { "type": "string" },
+        "source_id": { "type": "string" },
+        "category": { "type": "string" },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "code_points": { "type": "integer", "minimum": 0 },
+        "min_tokens": { "type": "integer", "minimum": 0 },
+        "max_tokens": { "type": "integer", "minimum": 0 },
+        "method": { "type": "string" }
+      }
+    },
+    "fix_plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "finding_rule_id", "risk", "edits", "preconditions", "postconditions", "backup_required", "rollback"],
+      "properties": {
+        "id": { "type": "string" },
+        "finding_rule_id": { "type": "string" },
+        "risk": { "enum": ["SAFE", "REVIEW", "MANUAL"] },
+        "edits": { "type": "array", "items": { "type": "object" } },
+        "preconditions": { "type": "array", "items": { "type": "string" } },
+        "postconditions": { "type": "array", "items": { "type": "string" } },
+        "backup_required": { "type": "boolean" },
+        "rollback": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "run_metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "generated_at": { "type": "string" },
+        "cwd": { "type": "string" },
+        "os": { "type": "string" }
+      }
+    }
+  }
+}
