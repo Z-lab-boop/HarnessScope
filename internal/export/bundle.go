@@ -48,6 +48,9 @@ const SchemaVersion = "1.0.0"
 const readme = "HarnessScope offline diagnostic bundle\n\nThis bundle is sanitized and contains reports, optional normalized drift, and SHA-256 member hashes. It contains no raw configuration or backup contents. Human review is required before public upload. Review all members for sensitive project details before sharing.\n"
 
 var homePathPattern = regexp.MustCompile(`(?i)(?:/(?:Users|home)/|[A-Z]:[\\/](?:Users|Documents and Settings)[\\/])`)
+var versionToken = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$`)
+var metadataToken = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:+\[\]-]{0,127}$`)
+var baselineName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 type Exporter struct{ clock func() time.Time }
 
@@ -70,8 +73,8 @@ func (e *Exporter) Write(ctx context.Context, output io.Writer, input Input) (Ma
 	if err := ctx.Err(); err != nil {
 		return Manifest{}, err
 	}
-	if strings.TrimSpace(input.ToolVersion) == "" {
-		return Manifest{}, fmt.Errorf("tool version is empty")
+	if err := validateMetadata(input); err != nil {
+		return Manifest{}, err
 	}
 	generatedAt := e.clock().UTC()
 	var reportJSON, reportHTML bytes.Buffer
@@ -140,7 +143,51 @@ func (e *Exporter) Write(ctx context.Context, output io.Writer, input Input) (Ma
 	if err := archive.Close(); err != nil {
 		return Manifest{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return Manifest{}, err
+	}
 	return manifest, nil
+}
+
+// Metadata is independent of the caller-sanitized report, so constrain it to
+// path-free version/identifier tokens and the exact normalized drift contract.
+func validateMetadata(input Input) error {
+	if !versionToken.MatchString(input.ToolVersion) {
+		return fmt.Errorf("invalid tool version")
+	}
+	for _, client := range input.Report.Analysis.Clients {
+		if !metadataToken.MatchString(client.ID) {
+			return fmt.Errorf("invalid client identifier")
+		}
+	}
+	if input.Drift == nil {
+		return nil
+	}
+	drift := input.Drift
+	if drift.SchemaVersion != snapshots.SchemaVersion || (drift.Baseline != "" && !baselineName.MatchString(drift.Baseline)) {
+		return fmt.Errorf("invalid normalized drift metadata")
+	}
+	for _, change := range drift.Changes {
+		switch change.Kind {
+		case snapshots.ChangeAdded, snapshots.ChangeRemoved, snapshots.ChangeChanged:
+		default:
+			return fmt.Errorf("invalid normalized drift change")
+		}
+		switch change.EntityType {
+		case snapshots.EntityClient, snapshots.EntitySource, snapshots.EntityNode, snapshots.EntityFinding, snapshots.EntityCompatibility:
+		default:
+			return fmt.Errorf("invalid normalized drift entity")
+		}
+		if !metadataToken.MatchString(change.ID) || change.Summary != strings.ToLower(change.EntityType)+" "+change.ID+" "+strings.ToLower(change.Kind) {
+			return fmt.Errorf("invalid normalized drift identifier or summary")
+		}
+		for _, client := range change.Clients {
+			if !metadataToken.MatchString(client) {
+				return fmt.Errorf("invalid normalized drift client")
+			}
+		}
+	}
+	return nil
 }
 
 func safeMember(item member, redactor secrets.Redactor, home string) bool {

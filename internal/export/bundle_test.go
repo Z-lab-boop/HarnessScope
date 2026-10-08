@@ -228,6 +228,100 @@ func TestBundleManifestHasOnlyPublicFields(t *testing.T) {
 	}
 }
 
+func TestBundleRejectsArbitraryMetadataAndDriftPathsBeforeWriting(t *testing.T) {
+	for _, value := range []string{"/private/build/project", `D:\build\project`, "../project"} {
+		for _, field := range []string{"tool_version", "client_id", "baseline", "schema_version", "kind", "entity_type", "id", "summary", "clients"} {
+			t.Run(field+"/"+value, func(t *testing.T) {
+				input := bundleInput()
+				input.Drift = &snapshots.Diff{SchemaVersion: "1.0.0", Baseline: "baseline", Changes: []snapshots.Change{{Kind: "ADDED", EntityType: "NODE", ID: "node_fixture", Summary: "node node_fixture added", Clients: []string{"codex"}}}}
+				switch field {
+				case "tool_version":
+					input.ToolVersion = value
+				case "client_id":
+					input.Report.Analysis.Clients[0].ID = value
+				case "baseline":
+					input.Drift.Baseline = value
+				case "schema_version":
+					input.Drift.SchemaVersion = value
+				case "kind":
+					input.Drift.Changes[0].Kind = value
+				case "entity_type":
+					input.Drift.Changes[0].EntityType = value
+				case "id":
+					input.Drift.Changes[0].ID = value
+				case "summary":
+					input.Drift.Changes[0].Summary = value
+				case "clients":
+					input.Drift.Changes[0].Clients[0] = value
+				}
+				var output bytes.Buffer
+				if _, err := New(nil).Write(context.Background(), &output, input); err == nil {
+					t.Fatal("raw metadata path accepted")
+				} else if strings.Contains(err.Error(), value) {
+					t.Fatal("metadata error leaks path")
+				}
+				if output.Len() != 0 {
+					t.Fatalf("rejected metadata wrote %d bytes", output.Len())
+				}
+			})
+		}
+	}
+}
+
+func TestBundleAcceptsNormalizedSnapshotDrift(t *testing.T) {
+	input := bundleInput()
+	input.ToolVersion = "0.2.0-dev+abc123"
+	drift := snapshots.Compare(input.Report, model.ScanResult{SchemaVersion: "1.0.0"})
+	drift.Baseline = "v0.2-baseline"
+	input.Drift = &drift
+	var output bytes.Buffer
+	if _, err := New(nil).Write(context.Background(), &output, input); err != nil {
+		t.Fatal(err)
+	}
+	files := readBundle(t, output.Bytes())
+	var stored snapshots.Diff
+	if err := json.Unmarshal(files["drift.json"], &stored); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(stored, drift) {
+		t.Fatal("normalized drift changed during export")
+	}
+}
+
+func TestBundleReturnsCancellationDuringFinalFlush(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	writer := &cancelOnFinalFlushWriter{cancel: cancel}
+	manifest, err := New(nil).Write(ctx, writer, bundleInput())
+	if !writer.canceled {
+		t.Fatal("test did not reach final ZIP flush")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("final-flush cancellation returned %v", err)
+	}
+	if !reflect.DeepEqual(manifest, Manifest{}) {
+		t.Fatal("canceled export returned successful manifest")
+	}
+	// Cancellation is delivered by a successful writer in archive.Close, after
+	// the central-directory trailer arrives; it cannot be caught by loop checks.
+	readBundle(t, writer.output.Bytes())
+}
+
+type cancelOnFinalFlushWriter struct {
+	output   bytes.Buffer
+	cancel   context.CancelFunc
+	canceled bool
+}
+
+func (w *cancelOnFinalFlushWriter) Write(data []byte) (int, error) {
+	n, err := w.output.Write(data)
+	if bytes.Contains(data, []byte{'P', 'K', 5, 6}) {
+		w.cancel()
+		w.canceled = true
+	}
+	return n, err
+}
+
 type failingWriter struct{ err error }
 
 func (w failingWriter) Write([]byte) (int, error) { return 0, w.err }
