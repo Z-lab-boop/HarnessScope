@@ -96,7 +96,9 @@ func (r *Runtime) Scan(ctx context.Context, options ScanOptions) (model.ScanResu
 	if err := resolver.Validate(analysis.Graph); err != nil {
 		return model.ScanResult{}, fmt.Errorf("validate provenance graph: %w", err)
 	}
-	analysis.Findings = append(findings, analyzers.Run(ctx, analysis)...)
+	analysis.Findings = append(findings, analyzers.RunWithOptions(ctx, analysis, analyzers.Options{
+		PathEntries: r.Environment.PathEntries, ScanRoot: cwd, HomeDir: r.Environment.HomeDir,
+	})...)
 	analysis.Context = analyzers.EstimateContext(analysis.Graph.Nodes)
 	return model.Canonicalize(model.ScanResult{
 		SchemaVersion: model.ReportSchemaVersion,

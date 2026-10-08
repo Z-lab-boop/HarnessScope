@@ -171,6 +171,7 @@
     },
     "finding": {
       "type": "object",
+      "description": "Diagnostics, including advanced rules. Behavioral evidence inherits the weakest relevant adapter confidence; directly observed facts may be CONFIRMED.",
       "additionalProperties": false,
       "required": ["rule_id", "severity", "evidence", "summary", "reason", "impact", "remediation"],
       "properties": {
@@ -236,6 +237,7 @@
     },
     "run_metadata": {
       "type": "object",
+      "description": "Public run metadata excludes executable search entries and other analyzer-only environment inputs.",
       "additionalProperties": false,
       "properties": {
         "generated_at": { "type": "string" },

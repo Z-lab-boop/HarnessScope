@@ -183,8 +183,10 @@ type Graph struct {
 }
 
 type Finding struct {
-	RuleID          string         `json:"rule_id"`
-	Severity        Severity       `json:"severity"`
+	RuleID   string   `json:"rule_id"`
+	Severity Severity `json:"severity"`
+	// Behavioral findings inherit the weakest relevant adapter evidence;
+	// directly observed source and credential-presence facts may be CONFIRMED.
 	Evidence        EvidenceStatus `json:"evidence"`
 	Summary         string         `json:"summary"`
 	Reason          string         `json:"reason"`
@@ -267,6 +269,7 @@ type Analysis struct {
 }
 
 type RunMetadata struct {
+	// Executable search entries are private analyzer inputs and are never serialized.
 	GeneratedAt string `json:"generated_at,omitempty"`
 	CWD         string `json:"cwd,omitempty"`
 	OS          string `json:"os,omitempty"`
