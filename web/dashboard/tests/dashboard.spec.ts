@@ -3,9 +3,28 @@ import { createServer, type Server } from "node:http";
 import { readFile, readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { APIClient } from "../src/api.js";
+import { layout } from "../src/graph.js";
+import { normalize } from "../src/compare.js";
+import type { ConfigNode } from "../src/types.js";
 
 const token = "synthetic-session-token";
 const fixture = JSON.parse(await readFile(new URL("./fixture-state.json", import.meta.url), "utf8"));
+const origin = (scope = "PROJECT", rank = 1) => ({ source_id: "source-a", logical_path: "./config.json", scope, precedence_rank: rank, rule: "fixture precedence" });
+fixture.result.analysis.graph = {
+  nodes: [
+    { id: "z-rule", type: "RULE", client: "opencode", display_name: "shared", adapter_confidence: "LIKELY", origins: [origin("USER")], attributes: { mode: { kind: "string", display: "review", present: true } } },
+    { id: "client-a", type: "CLIENT", client: "codex", display_name: "codex", adapter_confidence: "CONFIRMED" },
+    { id: "source-a", type: "SOURCE", client: "codex", display_name: "./config.json", adapter_confidence: "CONFIRMED", origins: [origin()] },
+    { id: "a-rule", type: "RULE", client: "codex", display_name: "shared", adapter_confidence: "CONFIRMED", load_condition: "When workspace opens", origins: [origin("USER", 2), origin("PROJECT", 1)], attributes: { mode: { kind: "string", display: "safe", present: true }, token: { kind: "secret", display: "SECRET_CANARY", present: true, secret_category: "credential" } } },
+    { id: "b-skill", type: "SKILL", client: "codex", display_name: "local-only", adapter_confidence: "UNKNOWN", origins: [origin()] },
+    ...["codex", "opencode"].map((client, index) => ({ id: `same-${index}`, type: "MCP_SERVER", client, display_name: "same service", adapter_confidence: "CONFIRMED", attributes: { host: { kind: "string", display: "localhost", present: true } } })),
+  ],
+  edges: [
+    { id: "e1", from: "client-a", to: "source-a", type: "LOADS", ruleset: "fixture", evidence: "CONFIRMED" },
+    { id: "e2", from: "source-a", to: "a-rule", type: "OVERRIDES", ruleset: "fixture", evidence: "LIKELY" },
+  ],
+};
+fixture.result.analysis.findings[0].graph_references = ["a-rule"];
 const assets = new URL("../../../internal/server/assets/", import.meta.url);
 let server: Server;
 let base: string;
@@ -60,7 +79,12 @@ test.beforeAll(async () => {
         if (mode === "empty") {
           data.result.analysis = { clients: null, sources: null, graph: { nodes: null, edges: null }, findings: null };
         }
-        if (mode === "hostile") data.result.analysis.clients[0].id = '<img src="https://example.invalid/leak">';
+        if (mode === "hostile") {
+          data.result.analysis.clients[0].id = '<img src="https://example.invalid/leak">';
+          data.result.analysis.graph.nodes[3].display_name = '<img src="https://example.invalid/leak">';
+          data.result.analysis.graph.nodes[3].origins[0].logical_path = "/Users/private/PATH_CANARY";
+          data.result.analysis.graph.nodes[3].origins[1].logical_path = "/home/private/PATH_CANARY";
+        }
         res.end(JSON.stringify(data));
       }
       return;
@@ -254,7 +278,7 @@ test("captures the dashboard for local visual inspection without updating a base
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(`${base}/#token=${token}`);
   await expect(page.getByRole("button", { name: "Inspect codex" })).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath("overview-local.png"), fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath("overview-local.png") });
   await page.setViewportSize({ width: 768, height: 900 });
   await page.screenshot({ path: testInfo.outputPath("overview-768-local.png"), fullPage: true });
   expect(errors).toEqual([]);
@@ -268,4 +292,161 @@ test("dashboard source avoids HTML string injection sinks", async () => {
     const source = await readFile(new URL(name, directory), "utf8");
     expect(source, fileURLToPath(new URL(name, directory))).not.toMatch(/\.(?:innerHTML|outerHTML)\s*=|insertAdjacentHTML|document\.write\s*\(/);
   }
+});
+
+test("graph has deterministic columns, accessible nodes, evidence edges and keyboard inspector", async ({ page }) => {
+  await page.goto(`${base}/?view=graph#token=${token}`);
+  const nodes = page.locator("[data-node-id]");
+  await expect(nodes).toHaveCount(7);
+  await expect(page.locator("[data-edge-id]")).toHaveCount(2);
+  await expect(page.locator('[data-edge-id="e1"]')).toHaveAttribute("stroke-dasharray", "none");
+  await expect(page.locator('[data-edge-id="e2"]')).toHaveAttribute("opacity", ".65");
+  await expect(page.locator('[data-edge-id="e2"]')).not.toHaveAttribute("stroke-dasharray", "none");
+  await expect(page.locator('[data-node-id="client-a"]')).toHaveAttribute("transform", "translate(120 70)");
+  await expect(page.locator('[data-node-id="source-a"]')).toHaveAttribute("transform", "translate(420 70)");
+  const first = page.locator('[data-node-id="a-rule"]');
+  await expect(first).toHaveAccessibleName(/shared.*RULE.*codex.*CONFIRMED/);
+  await first.focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(page.locator('[data-node-id="b-skill"]')).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("Enter");
+  const inspector = page.getByRole("complementary", { name: "Inspector" });
+  await expect(inspector).toContainText("When workspace opens");
+  await expect(inspector.locator("ol li").first()).toContainText("PROJECT");
+  await expect(inspector).toContainText("[REDACTED]");
+  await expect(page.locator("body")).not.toContainText("SECRET_CANARY");
+});
+
+test("graph pan and zoom clamp, reset, and release pointer capture", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto(`${base}/?view=graph#token=${token}`);
+  const viewport = page.locator("[data-graph-viewport]");
+  await expect(viewport).toHaveAttribute("transform", "translate(0 0) scale(1)");
+  await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await expect(viewport).toHaveAttribute("transform", /scale\(1\.2\)/);
+  const svg = page.getByRole("group", { name: "Configuration graph" });
+  await svg.hover({ position: { x: 50, y: 220 } });
+  await page.mouse.wheel(0, -500);
+  await expect(viewport).not.toHaveAttribute("transform", /scale\(1\.2\)/);
+  for (let i = 0; i < 15; i++) await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await expect(viewport).toHaveAttribute("transform", /scale\(2\.5\)/);
+  for (let i = 0; i < 15; i++) await page.getByRole("button", { name: "Zoom out", exact: true }).click();
+  await expect(viewport).toHaveAttribute("transform", /scale\(0\.5\)/);
+  await page.getByRole("button", { name: "Reset graph view" }).click();
+  const box = (await svg.boundingBox())!;
+  await page.mouse.move(box.x + 20, box.y + 220);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 70, box.y + 260);
+  await page.mouse.up();
+  const panned = await viewport.getAttribute("transform");
+  expect(panned).not.toBe("translate(0 0) scale(1)");
+  await page.mouse.move(box.x + 130, box.y + 300);
+  await expect(viewport).toHaveAttribute("transform", panned!);
+  await page.getByRole("button", { name: "Reset graph view" }).click();
+  await expect(viewport).toHaveAttribute("transform", "translate(0 0) scale(1)");
+  await page.mouse.move(box.x + 20, box.y + 220);
+  await page.mouse.down();
+  await svg.dispatchEvent("pointercancel", { pointerId: 1 });
+  await page.mouse.move(box.x + 90, box.y + 290);
+  await page.mouse.up();
+  await expect(viewport).toHaveAttribute("transform", "translate(0 0) scale(1)");
+  expect(errors).toEqual([]);
+});
+
+test("graph filters combine without moving surviving nodes and retain input focus", async ({ page }) => {
+  await page.goto(`${base}/?view=graph#token=${token}`);
+  const position = await page.locator('[data-node-id="a-rule"]').getAttribute("transform");
+  const search = page.getByRole("searchbox", { name: "Search graph" });
+  await search.pressSequentially("shared");
+  await expect(search).toBeFocused();
+  await expect(page.locator("[data-node-id]")).toHaveCount(2);
+  await page.getByLabel("Graph client").selectOption("codex");
+  await page.getByLabel("Graph scope").selectOption("PROJECT");
+  await page.getByLabel("Graph evidence").selectOption("CONFIRMED");
+  await expect(page.locator("[data-node-id]")).toHaveCount(1);
+  await expect(page.locator('[data-node-id="a-rule"]')).toHaveAttribute("transform", position!);
+  await expect(page.locator("[data-edge-id]")).toHaveCount(0);
+  await page.getByLabel("Graph evidence").selectOption("UNKNOWN");
+  await expect(page.getByText("No nodes match these filters.")).toBeVisible();
+});
+
+test("findings combine all filters and focus the referenced graph node", async ({ page }) => {
+  await page.goto(`${base}/?view=findings#token=${token}`);
+  await page.getByRole("searchbox", { name: "Search findings" }).fill("command");
+  await page.getByLabel("Finding severity").selectOption("HIGH");
+  await page.getByLabel("Finding evidence").selectOption("CONFIRMED");
+  await page.getByLabel("Finding client").selectOption("codex");
+  await expect(page.locator(".finding-card")).toHaveCount(1);
+  await page.getByLabel("Finding client").selectOption("opencode");
+  await expect(page.getByText("No findings match these filters.")).toBeVisible();
+  await page.getByLabel("Finding client").selectOption("codex");
+  await page.getByRole("button", { name: "Focus shared in graph" }).click();
+  await expect(page.getByRole("link", { name: "Graph", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.locator('[data-node-id="a-rule"]')).toBeFocused();
+  await expect(page.getByRole("complementary", { name: "Inspector" })).toContainText("When workspace opens");
+});
+
+test("compare normalizes by type and name and exposes presence and divergence without secrets", async ({ page }) => {
+  await page.goto(`${base}/?view=compare#token=${token}`);
+  await expect(page.getByRole("row", { name: /RULE shared.*Divergent/ })).toBeVisible();
+  await expect(page.getByRole("row", { name: /SKILL local-only.*Missing/ })).toContainText("Missing in opencode");
+  await expect(page.getByRole("row", { name: /MCP_SERVER same service.*Present/ })).toBeVisible();
+  await page.getByLabel("Left client").selectOption("opencode");
+  await page.getByLabel("Right client").selectOption("codex");
+  await expect(page.getByRole("row", { name: /SKILL local-only.*Missing/ })).toContainText("Missing in opencode");
+  await expect(page.locator("body")).not.toContainText("SECRET_CANARY");
+});
+
+test("new views handle hostile text, unsafe origins, null slices and 768px geometry", async ({ page }, testInfo) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  mode = "hostile";
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto(`${base}/?view=graph#token=${token}`);
+  await page.locator('[data-node-id="a-rule"]').focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("body")).not.toContainText(/\/Users\/|\/home\/|PATH_CANARY|SECRET_CANARY/);
+  await expect(page.locator("img")).toHaveCount(0);
+  for (const view of ["Graph", "Findings", "Compare"]) {
+    await page.getByRole("link", { name: view, exact: true }).click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  mode = "empty";
+  for (const view of ["graph", "findings", "compare"]) {
+    await page.goto(`${base}/?view=${view}#token=${token}`);
+    await expect(page.getByRole("main")).toContainText(view === "compare" ? "Two clients" : view === "graph" ? "No nodes" : "No findings");
+  }
+  mode = "ok";
+  for (const view of ["graph", "findings", "compare"]) {
+    await page.goto(`${base}/?view=${view}#token=${token}`);
+    await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "false");
+    await page.screenshot({ path: testInfo.outputPath(`${view}-768-local.png`), fullPage: true });
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(`${base}/?view=graph#token=${token}`);
+  await expect(page.locator("[data-node-id]")).toHaveCount(7);
+  await page.screenshot({ path: testInfo.outputPath("graph-local.png"), fullPage: true });
+  await page.locator('[data-node-id="a-rule"]').focus();
+  await page.keyboard.press("Enter");
+  await page.screenshot({ path: testInfo.outputPath("inspector-local.png"), fullPage: true });
+  expect(errors).toEqual([]);
+});
+
+test("normalization and layout resist input order, attribute order and duplicate-name loss", () => {
+  const nodes: ConfigNode[] = structuredClone(fixture.result.analysis.graph.nodes);
+  expect(layout([...nodes].reverse())).toEqual(layout(nodes));
+  const source = nodes.find((node) => node.id === "source-a")!;
+  expect(layout(nodes).find((node) => node.id === source.id)).toMatchObject({ x: 420, y: 70 });
+  const left = nodes.find((node) => node.id === "same-0")!;
+  const right = nodes.find((node) => node.id === "same-1")!;
+  left.attributes = { a: { kind: "string", display: "1", present: true }, b: { kind: "secret", display: "LEFT_CANARY", present: true } };
+  right.attributes = { b: { kind: "secret", display: "RIGHT_CANARY", present: true }, a: { kind: "string", display: "1", present: true } };
+  expect(normalize(nodes, "codex", "opencode").find((row) => row.name === "same service")?.status).toBe("Present");
+  nodes.push({ ...left, id: "same-duplicate", attributes: {} });
+  expect(normalize(nodes, "codex", "opencode").find((row) => row.name === "same service")?.status).toBe("Divergent");
+  nodes.push({ ...left, id: "other-type", type: "HOOK" });
+  expect(normalize(nodes, "codex", "opencode").filter((row) => row.name === "same service")).toHaveLength(2);
 });

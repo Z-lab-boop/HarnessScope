@@ -1,6 +1,11 @@
 import { APIClient, APIError, consumeFragmentToken } from "./api.js";
 import { Store } from "./store.js";
 import type { DashboardState, Route, UIState } from "./types.js";
+import { renderGraph } from "./graph.js";
+import { renderFindings } from "./findings.js";
+import { renderCompare } from "./compare.js";
+import { renderInspector } from "./inspector.js";
+import { emptyFilters, initialViews, type Actions } from "./views.js";
 
 const routes: Record<Route, string> = { overview: "Overview", graph: "Graph", findings: "Findings", compare: "Compare", fixes: "Fix Center", drift: "Drift", export: "Export" };
 function readRoute(): Route {
@@ -22,7 +27,7 @@ function section(title: string, className = ""): HTMLElement {
 }
 
 const api = new APIClient(consumeFragmentToken());
-const store = new Store({ dashboard: null, route: readRoute(), selection: null, busy: true, error: null });
+const store = new Store({ dashboard: null, route: readRoute(), selection: null, busy: true, error: null, views: initialViews() });
 const root = document.querySelector<HTMLDivElement>("#dashboard")!;
 const skip = element("a", "Skip to workbench", "skip-link");
 skip.href = "#workbench";
@@ -147,30 +152,17 @@ function overview(data: DashboardState): void {
   main.append(summary);
 }
 
-function renderInspector(state: Readonly<UIState>): void {
-  inspector.replaceChildren(element("p", "DETAIL CHANNEL", "eyebrow"), element("h2", "Inspector"));
-  const client = state.dashboard?.result.analysis.clients?.find((item) => item.id === state.selection);
-  if (!client) {
-    const reticle = element("div", "+", "reticle");
-    reticle.setAttribute("aria-hidden", "true");
-    inspector.append(reticle, element("h3", "Follow a signal"), element("p", "Select a client in the signal rail to inspect detection and evidence boundaries.", "muted"));
-    return;
-  }
-  inspector.append(element("h3", client.id), badge(client.compatibility.tier, client.compatibility.tier === "PREVIEW" ? "preview" : "verified"));
-  const details = element("dl");
-  const values: [string, string][] = [["Detection", client.detection.installed ? "Installed" : "Not detected"], ["Compatibility", client.compatibility.state], ["Ruleset", client.compatibility.ruleset_version], ["Last verification", client.compatibility.last_verification_at || "Not recorded"]];
-  for (const [label, value] of values) details.append(element("dt", label), element("dd", value));
-  inspector.append(details);
-  if (client.effective.limitations?.length) {
-    inspector.append(element("h3", "Limitations"));
-    const list = element("ul");
-    for (const limitation of client.effective.limitations) list.append(element("li", limitation));
-    inspector.append(list);
-  }
-}
-
+const actions: Actions = {
+  update: (change) => store.update(change),
+  focusNode: (id) => {
+    const url = new URL(location.href); url.searchParams.set("view", "graph"); history.pushState(null, "", url.pathname + url.search);
+    store.update({ route: "graph", selection: id, views: { ...(store.get().views ?? initialViews()), graph: emptyFilters() } });
+    Array.from(main.querySelectorAll<SVGGElement>("[data-node-id]")).find((node) => node.dataset.nodeId === id)?.focus();
+  },
+};
 let renderedDashboard: DashboardState | null | undefined;
 let renderedRoute: Route | undefined;
+let renderedViews: UIState["views"];
 function render(state: Readonly<UIState>): void {
   for (const [route, link] of links) {
     if (state.route === route) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");
@@ -182,11 +174,17 @@ function render(state: Readonly<UIState>): void {
   main.setAttribute("aria-busy", String(state.busy));
   alert.textContent = state.error ?? "";
   alert.hidden = !state.error;
-  if (state.dashboard !== renderedDashboard || state.route !== renderedRoute) {
+  if (state.dashboard !== renderedDashboard || state.route !== renderedRoute || state.views !== renderedViews) {
+    const active = document.activeElement as HTMLInputElement | HTMLSelectElement | null;
+    const control = active?.dataset.control;
+    const cursor = active instanceof HTMLInputElement ? active.selectionStart : null;
     main.replaceChildren();
     if (!state.dashboard) heading("Connect to your workspace", "Reading the authenticated local scan. If the server is unavailable, reopen its launch URL.");
     else if (state.route === "overview") overview(state.dashboard);
-    else {
+    else if (["graph", "findings", "compare"].includes(state.route)) {
+      heading(routes[state.route], "Snapshot evidence · trace configuration and inspect its origins");
+      main.append(state.route === "graph" ? renderGraph(state, actions) : state.route === "findings" ? renderFindings(state, actions) : renderCompare(state, actions));
+    } else {
       heading(routes[state.route], "Workspace evidence channel");
       const panel = section(`${routes[state.route]} workspace`, "boundary");
       panel.append(element("p", "This workspace is reserved for the next control-center module. The Overview contains the current scan summary."));
@@ -194,8 +192,21 @@ function render(state: Readonly<UIState>): void {
     }
     renderedDashboard = state.dashboard;
     renderedRoute = state.route;
+    renderedViews = state.views;
+    if (control) {
+      const replacement = Array.from(main.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-control]")).find((node) => node.dataset.control === control);
+      replacement?.focus();
+      if (replacement instanceof HTMLInputElement && cursor !== null) replacement.setSelectionRange(cursor, cursor);
+    }
   }
-  renderInspector(state);
+  inspector.replaceChildren(renderInspector(state));
+  const graphNodes = Array.from(main.querySelectorAll<SVGGElement>("[data-node-id]"));
+  const selectedVisible = graphNodes.some((node) => node.dataset.nodeId === state.selection);
+  graphNodes.forEach((node, index) => {
+    const selected = node.dataset.nodeId === state.selection;
+    node.setAttribute("aria-pressed", String(selected));
+    node.setAttribute("tabindex", selected || (!selectedVisible && index === 0) ? "0" : "-1");
+  });
   main.querySelectorAll<HTMLButtonElement>("[data-client]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.client === state.selection)));
 }
 async function load(rescanning = false): Promise<void> {

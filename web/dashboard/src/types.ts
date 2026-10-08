@@ -36,4 +36,6 @@ export interface ExplainResponse { node: ConfigNode; edges: Items<Edge> }
 export interface ComparisonRow { name: string; type: NodeType; status: string; left?: ConfigNode; right?: ConfigNode }
 export interface ComparisonResponse { left: string; right: string; rows: Items<ComparisonRow> }
 export type Route = "overview" | "graph" | "findings" | "compare" | "fixes" | "drift" | "export";
-export interface UIState { dashboard: DashboardState | null; route: Route; selection: string | null; busy: boolean; error: string | null }
+export interface Filters { text: string; client: string; scope: string; evidence: string; severity: string }
+export interface ViewState { graph: Filters; findings: Filters; left: string; right: string }
+export interface UIState { dashboard: DashboardState | null; route: Route; selection: string | null; busy: boolean; error: string | null; views?: ViewState }
