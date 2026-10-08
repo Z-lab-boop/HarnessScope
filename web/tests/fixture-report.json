@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0.0",
+  "analysis": {
+    "clients": [
+      {
+        "id": "codex",
+        "detection": {"installed": true, "version": "fixture"},
+        "capabilities": {"precedence": true, "instructions": true, "skills": true, "hooks": true, "mcp": true},
+        "compatibility": {"tier": "VERIFIED", "state": "VERIFIED", "ruleset_version": "fixture", "last_verification_at": "2026-10-08"},
+        "effective": {"client": "codex", "sources": [], "nodes": [], "edges": [], "findings": []}
+      }
+    ],
+    "sources": [],
+    "graph": {"nodes": [], "edges": []},
+    "findings": [
+      {
+        "rule_id": "PATH-0001",
+        "severity": "HIGH",
+        "evidence": "CONFIRMED",
+        "summary": "Missing fixture command",
+        "reason": "The configured absolute path does not exist.",
+        "impact": "The fixture server cannot start.",
+        "remediation": "Restore the fixture command.",
+        "affected_clients": ["codex"]
+      }
+    ]
+  }
+}

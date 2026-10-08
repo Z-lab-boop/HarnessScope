@@ -1,0 +1,15 @@
+{
+  "name": "harnessscope-report",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/report.ts --bundle --minify --outfile=../internal/report/assets/report.js && esbuild src/report.css --bundle --minify --outfile=../internal/report/assets/report.css",
+    "test:visual": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@types/node": "24.10.0",
+    "esbuild": "0.25.11",
+    "typescript": "5.9.3"
+  }
+}

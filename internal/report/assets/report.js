@@ -1,0 +1,1 @@
+"use strict";(()=>{var n=document.querySelector("#severity-filter"),o=Array.from(document.querySelectorAll("#findings tbody tr"));n?.addEventListener("change",()=>{let e=n.value;for(let t of o)t.hidden=e!=="ALL"&&t.dataset.severity!==e});document.querySelector("#toggle-data")?.addEventListener("click",()=>{let e=document.querySelector("#raw-data");e&&(e.hidden=!e.hidden)});})();

@@ -1,8 +1,13 @@
 package cli
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -15,6 +20,9 @@ func newScanCommand(runtime *Runtime, stdout io.Writer) *cobra.Command {
 	var clients []string
 	var noReport bool
 	var failOn string
+	var jsonPath string
+	var htmlPath string
+	var openReport bool
 	command := &cobra.Command{
 		Use:   "scan [path]",
 		Short: "Inspect effective coding-agent configuration",
@@ -35,6 +43,21 @@ func newScanCommand(runtime *Runtime, stdout io.Writer) *cobra.Command {
 			if err := report.WriteTerminal(stdout, result); err != nil {
 				return err
 			}
+			if !noReport {
+				writtenJSON, writtenHTML, err := writeReports(result, runtime.Environment.AppDataDir, jsonPath, htmlPath)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(stdout, "JSON report: %s\nHTML report: %s\n", writtenJSON, writtenHTML)
+				if openReport {
+					if runtime.OpenPath == nil {
+						return fmt.Errorf("opening reports is not available")
+					}
+					if err := runtime.OpenPath(command.Context(), writtenHTML); err != nil {
+						return fmt.Errorf("open HTML report: %w", err)
+					}
+				}
+			}
 			if crossesThreshold(result.Analysis.Findings, threshold) {
 				return &ExitError{Code: ExitThreshold, Err: fmt.Errorf("finding threshold %s crossed", strings.ToLower(string(threshold)))}
 			}
@@ -44,7 +67,49 @@ func newScanCommand(runtime *Runtime, stdout io.Writer) *cobra.Command {
 	command.Flags().StringSliceVar(&clients, "client", []string{"all"}, "client to inspect; repeat for multiple clients")
 	command.Flags().BoolVar(&noReport, "no-report", false, "do not write JSON or HTML reports")
 	command.Flags().StringVar(&failOn, "fail-on", "none", "return exit 1 at high, medium, low, or info")
+	command.Flags().StringVar(&jsonPath, "json", "", "write JSON report to this path")
+	command.Flags().StringVar(&htmlPath, "html", "", "write HTML report to this path")
+	command.Flags().BoolVar(&openReport, "open", false, "open the generated HTML report")
 	return command
+}
+
+func writeReports(result model.ScanResult, appDataDir, requestedJSON, requestedHTML string) (string, string, error) {
+	var canonical bytes.Buffer
+	if err := report.WriteJSON(&canonical, result); err != nil {
+		return "", "", err
+	}
+	hash := sha256.Sum256(canonical.Bytes())
+	id := hex.EncodeToString(hash[:])[:12]
+	defaultDir := filepath.Join(appDataDir, "reports", id)
+	jsonPath := requestedJSON
+	if jsonPath == "" {
+		jsonPath = filepath.Join(defaultDir, "report.json")
+	}
+	htmlPath := requestedHTML
+	if htmlPath == "" {
+		htmlPath = filepath.Join(defaultDir, "report.html")
+	}
+	for _, path := range []string{jsonPath, htmlPath} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			return "", "", fmt.Errorf("create report directory: %w", err)
+		}
+	}
+	if err := os.WriteFile(jsonPath, canonical.Bytes(), 0o600); err != nil {
+		return "", "", fmt.Errorf("write JSON report: %w", err)
+	}
+	file, err := os.OpenFile(htmlPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return "", "", fmt.Errorf("create HTML report: %w", err)
+	}
+	writeErr := report.WriteHTML(file, result)
+	closeErr := file.Close()
+	if writeErr != nil {
+		return "", "", fmt.Errorf("write HTML report: %w", writeErr)
+	}
+	if closeErr != nil {
+		return "", "", fmt.Errorf("close HTML report: %w", closeErr)
+	}
+	return jsonPath, htmlPath, nil
 }
 
 func parseThreshold(value string) (model.Severity, error) {

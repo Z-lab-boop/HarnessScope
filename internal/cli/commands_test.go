@@ -68,6 +68,57 @@ func TestScanNoReportDoesNotWriteWorkspace(t *testing.T) {
 	}
 }
 
+func TestScanWritesDefaultReportsToAppData(t *testing.T) {
+	workspace := t.TempDir()
+	runtime := fixtureRuntime(t, commandFixtureAdapter{id: "codex"})
+	var stdout, stderr bytes.Buffer
+
+	code := ExecuteWithRuntime(context.Background(), []string{"scan", workspace, "--client", "codex"}, &stdout, &stderr, runtime)
+
+	if code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	reportRoot := filepath.Join(runtime.Environment.AppDataDir, "reports")
+	entries, err := os.ReadDir(reportRoot)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("default report directory missing: entries=%v err=%v", entries, err)
+	}
+	for _, name := range []string{"report.json", "report.html"} {
+		path := filepath.Join(reportRoot, entries[0].Name(), name)
+		if _, err := os.Stat(path); err != nil || !strings.Contains(stdout.String(), path) {
+			t.Fatalf("report %s missing or not printed: err=%v stdout=%s", path, err, stdout.String())
+		}
+	}
+	if got := directoryNames(t, workspace); len(got) != 0 {
+		t.Fatalf("scan polluted workspace: %v", got)
+	}
+}
+
+func TestReportRendersSavedJSONWithoutScanning(t *testing.T) {
+	temp := t.TempDir()
+	jsonPath := filepath.Join(temp, "snapshot.json")
+	htmlPath := filepath.Join(temp, "snapshot.html")
+	data, err := model.MarshalCanonical(model.ScanResult{SchemaVersion: model.ReportSchemaVersion, Analysis: model.Analysis{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(jsonPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runtime := fixtureRuntime(t, commandFixtureAdapter{id: "codex"})
+	var stdout, stderr bytes.Buffer
+
+	code := ExecuteWithRuntime(context.Background(), []string{"report", "--from", jsonPath, "--html", htmlPath}, &stdout, &stderr, runtime)
+
+	if code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	html, err := os.ReadFile(htmlPath)
+	if err != nil || !strings.Contains(string(html), "HARNESSCOPE") {
+		t.Fatalf("saved report not rendered: err=%v html=%s", err, html)
+	}
+}
+
 func TestScanFailOnHighReturnsThresholdExitCode(t *testing.T) {
 	high := model.Finding{RuleID: "PATH-0001", Severity: model.SeverityHigh, Evidence: model.EvidenceConfirmed, Summary: "broken", Reason: "missing", Impact: "cannot start", Remediation: "restore"}
 	runtime := fixtureRuntime(t, commandFixtureAdapter{id: "codex", finding: &high})

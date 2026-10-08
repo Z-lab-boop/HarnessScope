@@ -61,7 +61,7 @@ func newRootCommand(runtime *Runtime, stdout, stderr io.Writer) *cobra.Command {
 		newScanCommand(runtime, stdout),
 		newExplainCommand(runtime, stdout),
 		newCompareCommand(runtime, stdout),
-		newPendingCommand("report"),
+		newReportCommand(stdout),
 		newPendingCommand("fix"),
 		newPendingCommand("rollback"),
 	)

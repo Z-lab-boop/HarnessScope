@@ -2,4 +2,6 @@
 /dist/
 /coverage.out
 /.hscope-test/
+/web/node_modules/
+/web/test-results/
 .DS_Store

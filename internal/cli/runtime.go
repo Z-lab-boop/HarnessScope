@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -20,6 +21,7 @@ import (
 type Runtime struct {
 	Registry    *adapters.Registry
 	Environment discovery.Environment
+	OpenPath    func(context.Context, string) error
 }
 
 type ScanOptions struct {
@@ -38,7 +40,18 @@ func DefaultRuntime() (*Runtime, error) {
 	return &Runtime{
 		Registry:    adapters.NewRegistry(codex.New(env, redactor), claude.New(env, redactor)),
 		Environment: env,
+		OpenPath:    platformOpen(env.GOOS),
 	}, nil
+}
+
+func platformOpen(goos string) func(context.Context, string) error {
+	return func(ctx context.Context, path string) error {
+		command := "xdg-open"
+		if goos == "darwin" {
+			command = "open"
+		}
+		return exec.CommandContext(ctx, command, path).Run()
+	}
 }
 
 func (r *Runtime) Scan(ctx context.Context, options ScanOptions) (model.ScanResult, error) {
