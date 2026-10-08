@@ -38,3 +38,18 @@ func TestReadJSONRejectsUnknownMajorSchema(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestWriteJSONUsesArraysForRequiredCollections(t *testing.T) {
+	result := model.ScanResult{Analysis: model.Analysis{Clients: []model.ClientResult{{
+		ID: "cursor", Effective: model.EffectiveConfig{Client: "cursor"},
+	}}}}
+	var output bytes.Buffer
+	if err := WriteJSON(&output, result); err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{`"sources": []`, `"nodes": []`, `"edges": []`, `"findings": []`} {
+		if !strings.Contains(output.String(), expected) {
+			t.Fatalf("required collection is not an array %s: %s", expected, output.String())
+		}
+	}
+}

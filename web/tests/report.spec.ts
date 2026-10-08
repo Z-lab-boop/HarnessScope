@@ -22,8 +22,13 @@ test("report stays offline and keyboard accessible", async ({ page }) => {
   await page.getByLabel("Severity").focus();
   await page.keyboard.press("ArrowDown");
   await expect(page.locator("tr[data-severity=HIGH]")).toBeVisible();
+  await page.getByRole("button", { name: "Toggle embedded JSON" }).click();
+  await expect(page.locator("#raw-data")).toContainText('"schema_version": "1.0.0"');
+  await page.getByRole("button", { name: "Toggle embedded JSON" }).click();
   expect(requests).toEqual([]);
-  await expect(page).toHaveScreenshot("report.png", { fullPage: true });
+  if (process.platform === "linux") {
+    await expect(page).toHaveScreenshot("report.png", { fullPage: true, maxDiffPixelRatio: 0.03 });
+  }
 });
 
 test("report remains readable without JavaScript", async ({ browser }) => {

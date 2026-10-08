@@ -7,13 +7,16 @@ import (
 
 func Canonicalize(input ScanResult) ScanResult {
 	result := input
-	result.Analysis.Clients = append([]ClientResult(nil), input.Analysis.Clients...)
-	result.Analysis.Sources = append([]ConfigSource(nil), input.Analysis.Sources...)
-	result.Analysis.Graph.Nodes = append([]ConfigNode(nil), input.Analysis.Graph.Nodes...)
-	result.Analysis.Graph.Edges = append([]Edge(nil), input.Analysis.Graph.Edges...)
-	result.Analysis.Findings = append([]Finding(nil), input.Analysis.Findings...)
+	result.Analysis.Clients = cloneSlice(input.Analysis.Clients)
+	result.Analysis.Sources = cloneSlice(input.Analysis.Sources)
+	result.Analysis.Graph.Nodes = cloneSlice(input.Analysis.Graph.Nodes)
+	result.Analysis.Graph.Edges = cloneSlice(input.Analysis.Graph.Edges)
+	result.Analysis.Findings = cloneSlice(input.Analysis.Findings)
 	result.Analysis.Context = append([]ContextEstimate(nil), input.Analysis.Context...)
 	result.Analysis.FixPlans = append([]FixPlan(nil), input.Analysis.FixPlans...)
+	for index := range result.Analysis.Clients {
+		result.Analysis.Clients[index].Effective = canonicalizeEffective(result.Analysis.Clients[index].Effective)
+	}
 
 	sort.Slice(result.Analysis.Clients, func(i, j int) bool {
 		return result.Analysis.Clients[i].ID < result.Analysis.Clients[j].ID
@@ -48,6 +51,31 @@ func Canonicalize(input ScanResult) ScanResult {
 		return result.Analysis.FixPlans[i].ID < result.Analysis.FixPlans[j].ID
 	})
 	return result
+}
+
+func canonicalizeEffective(input EffectiveConfig) EffectiveConfig {
+	result := input
+	result.Sources = cloneSlice(input.Sources)
+	result.Nodes = cloneSlice(input.Nodes)
+	result.Edges = cloneSlice(input.Edges)
+	result.Findings = cloneSlice(input.Findings)
+	sort.Slice(result.Sources, func(i, j int) bool { return result.Sources[i].ID < result.Sources[j].ID })
+	sort.Slice(result.Nodes, func(i, j int) bool { return result.Nodes[i].ID < result.Nodes[j].ID })
+	sort.Slice(result.Edges, func(i, j int) bool { return edgeSortKey(result.Edges[i]) < edgeSortKey(result.Edges[j]) })
+	sort.Slice(result.Findings, func(i, j int) bool {
+		if result.Findings[i].RuleID != result.Findings[j].RuleID {
+			return result.Findings[i].RuleID < result.Findings[j].RuleID
+		}
+		return firstOrigin(result.Findings[i]) < firstOrigin(result.Findings[j])
+	})
+	return result
+}
+
+func cloneSlice[T any](input []T) []T {
+	if len(input) == 0 {
+		return []T{}
+	}
+	return append([]T(nil), input...)
 }
 
 func MarshalCanonical(input ScanResult) ([]byte, error) {

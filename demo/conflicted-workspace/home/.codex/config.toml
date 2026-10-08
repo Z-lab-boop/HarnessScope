@@ -1,0 +1,5 @@
+[mcp_servers.shared]
+command = "/harnessscope-demo/missing-server"
+
+[mcp_servers.shared.env]
+API_KEY = "sk-demo-HARNESSSCOPE-CANARY-1234567890"

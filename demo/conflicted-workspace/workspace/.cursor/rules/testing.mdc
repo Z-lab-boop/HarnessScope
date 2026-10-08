@@ -1,0 +1,6 @@
+---
+description: Synthetic test rule
+alwaysApply: true
+---
+
+Prefer small changes and run focused tests.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -40,11 +41,15 @@ func newScanCommand(runtime *Runtime, stdout io.Writer) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := report.WriteTerminal(stdout, result); err != nil {
+			publicResult, err := sanitizeReportPaths(result, runtime.Environment.HomeDir, path)
+			if err != nil {
+				return err
+			}
+			if err := report.WriteTerminal(stdout, publicResult); err != nil {
 				return err
 			}
 			if !noReport {
-				writtenJSON, writtenHTML, err := writeReports(result, runtime.Environment.AppDataDir, jsonPath, htmlPath)
+				writtenJSON, writtenHTML, err := writeReports(publicResult, runtime.Environment.AppDataDir, jsonPath, htmlPath)
 				if err != nil {
 					return err
 				}
@@ -71,6 +76,27 @@ func newScanCommand(runtime *Runtime, stdout io.Writer) *cobra.Command {
 	command.Flags().StringVar(&htmlPath, "html", "", "write HTML report to this path")
 	command.Flags().BoolVar(&openReport, "open", false, "open the generated HTML report")
 	return command
+}
+
+func sanitizeReportPaths(result model.ScanResult, home, scanRoot string) (model.ScanResult, error) {
+	cleanHome := filepath.Clean(home)
+	data, err := model.MarshalCanonical(result)
+	if err != nil {
+		return model.ScanResult{}, fmt.Errorf("prepare public report: %w", err)
+	}
+	text := string(data)
+	if absoluteRoot, absoluteErr := filepath.Abs(scanRoot); absoluteErr == nil && absoluteRoot != string(filepath.Separator) {
+		text = strings.ReplaceAll(text, filepath.Clean(absoluteRoot), ".")
+	}
+	if home != "" && cleanHome != "." && cleanHome != string(filepath.Separator) {
+		text = strings.ReplaceAll(text, cleanHome, "~")
+	}
+	data = []byte(text)
+	var sanitized model.ScanResult
+	if err := json.Unmarshal(data, &sanitized); err != nil {
+		return model.ScanResult{}, fmt.Errorf("sanitize public report paths: %w", err)
+	}
+	return sanitized, nil
 }
 
 func writeReports(result model.ScanResult, appDataDir, requestedJSON, requestedHTML string) (string, string, error) {

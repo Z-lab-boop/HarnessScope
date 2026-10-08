@@ -1,0 +1,8 @@
+{
+  "mcp": {
+    "shared": {
+      "type": "local",
+      "command": ["/harnessscope-demo/missing-server"]
+    }
+  }
+}

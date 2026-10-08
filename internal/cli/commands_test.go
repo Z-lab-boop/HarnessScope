@@ -121,6 +121,41 @@ func TestScanWritesDefaultReportsToAppData(t *testing.T) {
 	}
 }
 
+func TestScanReportsCollapseHomePaths(t *testing.T) {
+	home := t.TempDir()
+	workspace := filepath.Join(home, "project")
+	if err := os.MkdirAll(workspace, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	homeNode := model.ConfigNode{
+		ID: "home_node", Client: "codex", Type: model.NodeInstruction, DisplayName: "home instruction", AdapterConfidence: model.EvidenceConfirmed,
+		Origins: []model.Origin{{SourceID: "source_codex", LogicalPath: filepath.Join(home, ".codex", "AGENTS.md"), Scope: model.ScopeUser, Rule: "fixture"}},
+	}
+	runtime := fixtureRuntime(t, commandFixtureAdapter{id: "codex", nodes: []model.ConfigNode{homeNode}})
+	runtime.Environment.HomeDir = home
+	runtime.Environment.AppDataDir = filepath.Join(home, "appdata")
+	var stdout, stderr bytes.Buffer
+
+	code := ExecuteWithRuntime(context.Background(), []string{"scan", workspace, "--client", "codex"}, &stdout, &stderr, runtime)
+	if code != ExitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	reportRoot := filepath.Join(runtime.Environment.AppDataDir, "reports")
+	entries, err := os.ReadDir(reportRoot)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("report missing: entries=%v err=%v", entries, err)
+	}
+	for _, name := range []string{"report.json", "report.html"} {
+		data, readErr := os.ReadFile(filepath.Join(reportRoot, entries[0].Name(), name))
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if strings.Contains(string(data), home) {
+			t.Fatalf("home path leaked in %s", name)
+		}
+	}
+}
+
 func TestReportRendersSavedJSONWithoutScanning(t *testing.T) {
 	temp := t.TempDir()
 	jsonPath := filepath.Join(temp, "snapshot.json")

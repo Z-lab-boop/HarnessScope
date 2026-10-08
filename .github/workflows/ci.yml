@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm --prefix web ci
+      - run: npm --prefix web run build
+      - run: git diff --exit-code -- internal/report/assets
+      - run: go test ./...
+      - run: go test -race ./...
+      - run: go vet ./...
+      - run: go build -trimpath -o bin/hscope ./cmd/hscope
+      - run: ./scripts/smoke-release.sh ./bin/hscope
+      - run: ./scripts/check-third-party-notices.sh
+      - if: runner.os == 'Linux'
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+      - if: runner.os == 'macOS'
+        working-directory: web
+        run: npx playwright install chromium
+      - run: npm --prefix web run test:visual
+
+  repository-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject synthetic canaries outside allowed inputs
+        run: |
+          matches=$(grep -RIl 'HARNESSSCOPE-CANARY' . --exclude-dir=.git || true)
+          printf '%s\n' "$matches"
+          unexpected=$(printf '%s\n' "$matches" | grep -Ev '^(./fixtures/|./demo/conflicted-workspace/|./demo/run.sh|./internal/.+_test.go|./scripts/smoke-release.sh|./docs/|./README|./CONTRIBUTING.md|./SECURITY.md|./THIRD_PARTY_NOTICES.md|./.github/workflows/ci.yml)' || true)
+          test -z "$unexpected"

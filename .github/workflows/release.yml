@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: darwin
+            arch: amd64
+          - os: darwin
+            arch: arm64
+          - os: linux
+            arch: amd64
+          - os: linux
+            arch: arm64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+      - name: Build archive
+        env:
+          TARGET_OS: ${{ matrix.os }}
+          TARGET_ARCH: ${{ matrix.arch }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -eu
+          name="harnessscope_${VERSION}_${TARGET_OS}_${TARGET_ARCH}"
+          mkdir -p "dist/$name"
+          CGO_ENABLED=0 GOOS="$TARGET_OS" GOARCH="$TARGET_ARCH" go build -trimpath -ldflags='-s -w' -o "dist/$name/hscope" ./cmd/hscope
+          cp LICENSE README.md README.zh-CN.md THIRD_PARTY_NOTICES.md "dist/$name/"
+          tar -C "dist/$name" -czf "dist/$name.tar.gz" hscope LICENSE README.md README.zh-CN.md THIRD_PARTY_NOTICES.md
+      - name: Smoke compatible artifact
+        if: matrix.os == 'linux' && matrix.arch == 'amd64'
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          unpack=$(mktemp -d)
+          tar -C "$unpack" -xzf "dist/harnessscope_${VERSION}_linux_amd64.tar.gz"
+          ./scripts/smoke-release.sh "$unpack/hscope"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: harnessscope-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/*.tar.gz
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum harnessscope_*.tar.gz >SHA256SUMS
+          sha256sum -c SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/harnessscope_*.tar.gz
+            dist/SHA256SUMS

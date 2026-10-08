@@ -12,5 +12,12 @@ filter?.addEventListener("change", () => {
 
 document.querySelector<HTMLButtonElement>("#toggle-data")?.addEventListener("click", () => {
   const panel = document.querySelector<HTMLElement>("#raw-data");
-  if (panel) panel.hidden = !panel.hidden;
+  const source = document.querySelector<HTMLElement>("#report-data");
+  if (!panel) return;
+  if (!panel.textContent && source?.textContent) {
+    const binary = atob(source.textContent.trim());
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    panel.textContent = new TextDecoder().decode(bytes);
+  }
+  panel.hidden = !panel.hidden;
 });
