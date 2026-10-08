@@ -25,7 +25,16 @@ func (e *ExitError) Error() string { return e.Err.Error() }
 func (e *ExitError) Unwrap() error { return e.Err }
 
 func Execute(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	root := newRootCommand(stdout, stderr)
+	runtime, err := DefaultRuntime()
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return ExitOperational
+	}
+	return ExecuteWithRuntime(ctx, args, stdout, stderr, runtime)
+}
+
+func ExecuteWithRuntime(ctx context.Context, args []string, stdout, stderr io.Writer, runtime *Runtime) int {
+	root := newRootCommand(runtime, stdout, stderr)
 	root.SetArgs(args)
 	if err := root.ExecuteContext(ctx); err != nil {
 		var exitErr *ExitError
@@ -39,7 +48,7 @@ func Execute(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	return ExitOK
 }
 
-func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
+func newRootCommand(runtime *Runtime, stdout, stderr io.Writer) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "hscope",
 		Short:         "See what your coding agent actually loads",
@@ -48,15 +57,23 @@ func newRootCommand(stdout, stderr io.Writer) *cobra.Command {
 	}
 	root.SetOut(stdout)
 	root.SetErr(stderr)
-	for _, name := range []string{"scan", "explain", "compare", "report", "fix", "rollback"} {
-		commandName := name
-		root.AddCommand(&cobra.Command{
-			Use:   commandName,
-			Short: commandName + " configuration state",
-			RunE: func(*cobra.Command, []string) error {
-				return fmt.Errorf("%s command not implemented", commandName)
-			},
-		})
-	}
+	root.AddCommand(
+		newScanCommand(runtime, stdout),
+		newExplainCommand(runtime, stdout),
+		newCompareCommand(runtime, stdout),
+		newPendingCommand("report"),
+		newPendingCommand("fix"),
+		newPendingCommand("rollback"),
+	)
 	return root
+}
+
+func newPendingCommand(name string) *cobra.Command {
+	return &cobra.Command{
+		Use:   name,
+		Short: name + " configuration state",
+		RunE: func(*cobra.Command, []string) error {
+			return fmt.Errorf("%s command not implemented", name)
+		},
+	}
 }
