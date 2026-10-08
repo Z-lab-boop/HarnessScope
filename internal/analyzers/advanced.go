@@ -277,7 +277,7 @@ func displayValues(attributes map[string]model.SafeValue) map[string]model.SafeV
 	result := make(map[string]model.SafeValue)
 	for field, value := range attributes {
 		if value.Present {
-			result[field] = model.SafeValue{Display: value.Display, Present: true}
+			result[field] = model.SafeValue{Kind: value.Kind, Display: value.Display, Present: true}
 		}
 	}
 	return result

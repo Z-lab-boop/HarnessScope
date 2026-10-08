@@ -148,6 +148,24 @@ func TestAdvancedDivergence(t *testing.T) {
 	assertNoAdvancedRule(t, RunWithOptions(context.Background(), advancedAnalysis(a, b), Options{}), "CONFIG-0001")
 }
 
+func TestAdvancedDivergencePreservesSafeValueKinds(t *testing.T) {
+	for _, tc := range []struct {
+		name, display, leftKind, rightKind string
+	}{
+		{"boolean versus string", "true", "boolean", "string"},
+		{"number versus string", "1", "number", "string"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := advancedNode("codex", model.NodeRule, "setting.enabled", model.EvidenceConfirmed, "value", tc.display)
+			b := advancedNode("cursor", model.NodeRule, "setting.enabled", model.EvidenceUnknown, "value", tc.display)
+			a.Attributes["value"] = model.SafeValue{Kind: tc.leftKind, Display: tc.display, Present: true}
+			b.Attributes["value"] = model.SafeValue{Kind: tc.rightKind, Display: tc.display, Present: true}
+			got := RunWithOptions(context.Background(), advancedAnalysis(a, b), Options{})
+			assertAdvancedFinding(t, got, "CONFIG-0001", model.SeverityMedium, model.EvidenceUnknown, []string{"codex", "cursor"}, append(a.Origins, b.Origins...))
+		})
+	}
+}
+
 func TestAdvancedSecretPresenceUsesCategoryAndProjectOrigin(t *testing.T) {
 	for _, tc := range []struct {
 		name, category string
