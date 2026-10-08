@@ -62,18 +62,8 @@ func newRootCommand(runtime *Runtime, stdout, stderr io.Writer) *cobra.Command {
 		newExplainCommand(runtime, stdout),
 		newCompareCommand(runtime, stdout),
 		newReportCommand(stdout),
-		newPendingCommand("fix"),
-		newPendingCommand("rollback"),
+		newFixCommand(runtime, stdout),
+		newRollbackCommand(runtime, stdout),
 	)
 	return root
-}
-
-func newPendingCommand(name string) *cobra.Command {
-	return &cobra.Command{
-		Use:   name,
-		Short: name + " configuration state",
-		RunE: func(*cobra.Command, []string) error {
-			return fmt.Errorf("%s command not implemented", name)
-		},
-	}
 }

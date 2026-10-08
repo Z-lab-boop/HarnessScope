@@ -209,8 +209,14 @@ type ContextEstimate struct {
 
 type Edit struct {
 	SourceID      string `json:"source_id"`
+	TargetPath    string `json:"target_path"`
 	ExpectedHash  string `json:"expected_hash"`
 	Operation     string `json:"operation"`
+	StartOffset   int    `json:"start_offset,omitempty"`
+	EndOffset     int    `json:"end_offset,omitempty"`
+	Replacement   string `json:"replacement,omitempty"`
+	OriginalMode  uint32 `json:"original_mode,omitempty"`
+	ResultMode    uint32 `json:"result_mode,omitempty"`
 	RedactedPatch string `json:"redacted_patch"`
 }
 

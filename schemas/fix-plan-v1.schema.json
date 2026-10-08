@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://harnessscope.dev/schemas/fix-plan-v1.schema.json",
+  "title": "HarnessScope fix plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "finding_rule_id",
+    "risk",
+    "edits",
+    "preconditions",
+    "postconditions",
+    "backup_required",
+    "rollback"
+  ],
+  "properties": {
+    "id": { "type": "string", "pattern": "^FIX-[A-Z]+-[A-F0-9]{8}$" },
+    "finding_rule_id": { "type": "string" },
+    "risk": { "enum": ["SAFE", "REVIEW", "MANUAL"] },
+    "edits": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/edit" }
+    },
+    "preconditions": { "type": "array", "items": { "type": "string" } },
+    "postconditions": { "type": "array", "items": { "type": "string" } },
+    "backup_required": { "type": "boolean" },
+    "rollback": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "edit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "target_path", "expected_hash", "operation", "redacted_patch"],
+      "properties": {
+        "source_id": { "type": "string" },
+        "target_path": { "type": "string" },
+        "expected_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "operation": { "enum": ["remove_byte_range", "chmod_executable", "normalize_path"] },
+        "start_offset": { "type": "integer", "minimum": 0 },
+        "end_offset": { "type": "integer", "minimum": 0 },
+        "replacement": { "type": "string" },
+        "original_mode": { "type": "integer", "minimum": 0 },
+        "result_mode": { "type": "integer", "minimum": 0 },
+        "redacted_patch": { "type": "string" }
+      }
+    }
+  }
+}

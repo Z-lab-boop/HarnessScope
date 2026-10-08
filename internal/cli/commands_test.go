@@ -19,6 +19,33 @@ type commandFixtureAdapter struct {
 	finding *model.Finding
 }
 
+type fixFixtureAdapter struct {
+	path string
+}
+
+func (a fixFixtureAdapter) ID() string { return "codex" }
+func (a fixFixtureAdapter) Detect(context.Context) model.DetectionResult {
+	return model.DetectionResult{Installed: true, Version: "fixture"}
+}
+func (a fixFixtureAdapter) DiscoverSources(context.Context, string) []model.ConfigSource {
+	return []model.ConfigSource{{
+		ID: "source_fix", Client: "codex", LogicalPath: a.path, CanonicalPath: a.path,
+		Scope: model.ScopeProject, Format: model.FormatMarkdown, Exists: true, Readable: true, Kind: "instruction",
+	}}
+}
+func (a fixFixtureAdapter) Parse(context.Context, model.ConfigSource) model.ParsedConfig {
+	return model.ParsedConfig{Client: "codex"}
+}
+func (a fixFixtureAdapter) Resolve(context.Context, []model.ParsedConfig) model.EffectiveConfig {
+	return model.EffectiveConfig{Client: "codex"}
+}
+func (a fixFixtureAdapter) Capabilities() model.AdapterCapabilities {
+	return model.AdapterCapabilities{Instructions: true}
+}
+func (a fixFixtureAdapter) Compatibility() model.CompatibilityMetadata {
+	return model.CompatibilityMetadata{Tier: model.TierVerified, State: model.CompatibilityVerified, RulesetVersion: "fixture-v1"}
+}
+
 func (a commandFixtureAdapter) ID() string { return a.id }
 func (a commandFixtureAdapter) Detect(context.Context) model.DetectionResult {
 	return model.DetectionResult{Installed: true, Version: "fixture"}
@@ -158,6 +185,63 @@ func TestCompareReportsMissingNormalizedElement(t *testing.T) {
 
 	if code != 0 || !strings.Contains(stdout.String(), "setting.model") || !strings.Contains(stdout.String(), "missing") {
 		t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestFixDefaultsToDryRunAndDoesNotMutate(t *testing.T) {
+	workspace := t.TempDir()
+	target := filepath.Join(workspace, "AGENTS.md")
+	original := "keep\nduplicate\nduplicate\n"
+	if err := os.WriteFile(target, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runtime := fixtureRuntime(t, fixFixtureAdapter{path: target})
+	var stdout, stderr bytes.Buffer
+
+	code := ExecuteWithRuntime(context.Background(), []string{"fix", "--path", workspace, "--client", "codex"}, &stdout, &stderr, runtime)
+
+	if code != ExitOK || !strings.Contains(stdout.String(), "remove_byte_range") || !strings.Contains(stdout.String(), "dry-run") {
+		t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	data, _ := os.ReadFile(target)
+	if string(data) != original {
+		t.Fatalf("dry-run mutated target: %q", data)
+	}
+}
+
+func TestFixApplyCreatesBackupAndRollbackRestores(t *testing.T) {
+	workspace := t.TempDir()
+	target := filepath.Join(workspace, "AGENTS.md")
+	original := "keep\nduplicate\nduplicate\n"
+	if err := os.WriteFile(target, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runtime := fixtureRuntime(t, fixFixtureAdapter{path: target})
+	var stdout, stderr bytes.Buffer
+
+	code := ExecuteWithRuntime(context.Background(), []string{"fix", "--path", workspace, "--client", "codex", "--apply"}, &stdout, &stderr, runtime)
+	if code != ExitOK {
+		t.Fatalf("apply code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	data, _ := os.ReadFile(target)
+	if string(data) != "keep\nduplicate\n" {
+		t.Fatalf("fix did not apply: %q", data)
+	}
+	backups := filepath.Join(runtime.Environment.AppDataDir, "backups")
+	entries, err := os.ReadDir(backups)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("backup missing: entries=%v err=%v", entries, err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = ExecuteWithRuntime(context.Background(), []string{"rollback", entries[0].Name()}, &stdout, &stderr, runtime)
+	if code != ExitOK {
+		t.Fatalf("rollback code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	restored, _ := os.ReadFile(target)
+	if string(restored) != original {
+		t.Fatalf("rollback mismatch: %q", restored)
 	}
 }
 
