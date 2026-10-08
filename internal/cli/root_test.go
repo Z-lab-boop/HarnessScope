@@ -15,7 +15,7 @@ func TestRootHelpListsStableCommands(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("code=%d stderr=%s", code, stderr.String())
 	}
-	for _, name := range []string{"scan", "explain", "compare", "report", "fix", "rollback", "serve"} {
+	for _, name := range []string{"scan", "explain", "compare", "report", "fix", "rollback", "serve", "snapshot", "export"} {
 		if !strings.Contains(stdout.String(), name) {
 			t.Errorf("help is missing %q", name)
 		}

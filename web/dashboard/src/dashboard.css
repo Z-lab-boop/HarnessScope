@@ -166,3 +166,10 @@ dd { margin: 6px 0; font: 12px var(--mono); }
   @keyframes boot-in { from { opacity: .4; transform: translateY(4px); } to { opacity: 1; transform: none; } }
   @keyframes signal-settle { from { opacity: .3; box-shadow: 0 0 14px #63e4ee88; } to { opacity: 1; box-shadow: 0 0 10px #63e4ee44; } }
 }
+.diagnostic-panel { padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.diagnostic-tools { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
+.diagnostic-tools .filter-control { flex: 1; min-width: 180px; }
+.privacy-warning { padding: 18px; border-left: 3px solid #e7ba70; background: #e7ba7012; line-height: 1.7; }
+.drift-group { margin-top: 24px; }
+.drift-row { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.drift-row code { overflow-wrap: anywhere; min-width: 0; }

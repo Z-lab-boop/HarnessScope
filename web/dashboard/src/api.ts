@@ -25,6 +25,9 @@ export class APIClient {
   saveSnapshot(revision: number, name: string): Promise<SnapshotMetadata> { return this.request("/api/v1/snapshots", { revision, name }); }
   drift(revision: number, baseline: string): Promise<DashboardState> { return this.request("/api/v1/drift", { revision, baseline }); }
   async export(revision: number, baseline?: string): Promise<Blob> {
+    return this.exportBundle(revision, baseline);
+  }
+  async exportBundle(revision: number, baseline?: string): Promise<Blob> {
     const response = await this.fetch("/api/v1/export", { revision, ...(baseline ? { baseline } : {}) });
     if (response.headers.get("content-type")?.split(";")[0].trim() !== "application/zip") throw new APIError("Expected a ZIP export.", response.status, "invalid_response");
     return response.blob();

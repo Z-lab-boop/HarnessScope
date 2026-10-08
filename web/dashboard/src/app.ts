@@ -6,6 +6,8 @@ import { renderFindings } from "./findings.js";
 import { renderCompare } from "./compare.js";
 import { renderInspector } from "./inspector.js";
 import { FixCenter } from "./fixes.js";
+import { DriftView } from "./drift.js";
+import { ExportView } from "./export.js";
 import { emptyFilters, initialViews, type Actions } from "./views.js";
 
 const routes: Record<Route, string> = { overview: "Overview", graph: "Graph", findings: "Findings", compare: "Compare", fixes: "Fix Center", drift: "Drift", export: "Export" };
@@ -162,6 +164,8 @@ const actions: Actions = {
     Array.from(main.querySelectorAll<SVGGElement>("[data-node-id]")).find((node) => node.dataset.nodeId === id)?.focus();
   },
 };
+const drift = new DriftView(store, api, actions, (message) => { toast.textContent = message; });
+const diagnosticExport = new ExportView(store, api, (message) => { toast.textContent = message; });
 let renderedDashboard: DashboardState | null | undefined;
 let renderedRoute: Route | undefined;
 let renderedViews: UIState["views"];
@@ -191,9 +195,7 @@ function render(state: Readonly<UIState>): void {
       main.append(fixes.render(state));
     } else {
       heading(routes[state.route], "Workspace evidence channel");
-      const panel = section(`${routes[state.route]} workspace`, "boundary");
-      panel.append(element("p", "This workspace is reserved for the next control-center module. The Overview contains the current scan summary."));
-      main.append(panel);
+      main.append(state.route === "drift" ? drift.render(state) : diagnosticExport.render(state));
     }
     renderedDashboard = state.dashboard;
     renderedRoute = state.route;
@@ -206,6 +208,8 @@ function render(state: Readonly<UIState>): void {
   }
   inspector.replaceChildren(renderInspector(state));
   fixes.sync(state);
+  drift.sync(state);
+  diagnosticExport.sync(state);
   const graphNodes = Array.from(main.querySelectorAll<SVGGElement>("[data-node-id]"));
   const selectedVisible = graphNodes.some((node) => node.dataset.nodeId === state.selection);
   graphNodes.forEach((node, index) => {
