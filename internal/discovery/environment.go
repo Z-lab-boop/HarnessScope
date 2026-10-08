@@ -11,10 +11,11 @@ import (
 )
 
 type Environment struct {
-	GOOS        string
-	HomeDir     string
-	AppDataDir  string
-	PathEntries []string
+	GOOS            string
+	HomeDir         string
+	AppDataDir      string
+	SystemConfigDir string
+	PathEntries     []string
 }
 
 func NewEnvironment(goos, home string, pathEntries []string) Environment {
@@ -24,10 +25,11 @@ func NewEnvironment(goos, home string, pathEntries []string) Environment {
 		appData = filepath.Join(home, "Library", "Application Support", "HarnessScope")
 	}
 	return Environment{
-		GOOS:        goos,
-		HomeDir:     home,
-		AppDataDir:  appData,
-		PathEntries: append([]string(nil), pathEntries...),
+		GOOS:            goos,
+		HomeDir:         home,
+		AppDataDir:      appData,
+		SystemConfigDir: "/etc/codex",
+		PathEntries:     append([]string(nil), pathEntries...),
 	}
 }
 

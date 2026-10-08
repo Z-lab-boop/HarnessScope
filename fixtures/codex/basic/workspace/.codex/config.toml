@@ -1,0 +1,4 @@
+model = "project-model"
+
+[mcp_servers.playwright]
+command = "fixture-mcp"

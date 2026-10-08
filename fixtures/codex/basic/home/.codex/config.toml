@@ -1,0 +1,7 @@
+model = "global-model"
+
+[mcp_servers.playwright]
+command = "missing-mcp"
+
+[environment]
+api_key = "sk-test-HARNESSSCOPE-CANARY-1234567890"
