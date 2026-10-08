@@ -10,7 +10,7 @@ import (
 func (a *Adapter) Resolve(_ context.Context, parsed []model.ParsedConfig) model.EffectiveConfig {
 	result := model.EffectiveConfig{Client: clientID}
 	winners := make(map[string]model.ConfigNode)
-	var additive []model.ConfigNode
+	allNodes := make(map[string]model.ConfigNode)
 	evidence := model.EvidenceUnknown
 	if a.Compatibility().State == model.CompatibilityVerified {
 		evidence = model.EvidenceConfirmed
@@ -20,8 +20,8 @@ func (a *Adapter) Resolve(_ context.Context, parsed []model.ParsedConfig) model.
 		result.Findings = append(result.Findings, config.Findings...)
 		result.Edges = append(result.Edges, config.Edges...)
 		for _, node := range config.Nodes {
+			allNodes[node.ID] = node
 			if node.Type == model.NodeInstruction || node.Type == model.NodeSkill {
-				additive = append(additive, node)
 				continue
 			}
 			if previous, exists := winners[node.DisplayName]; exists {
@@ -40,9 +40,15 @@ func (a *Adapter) Resolve(_ context.Context, parsed []model.ParsedConfig) model.
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		result.Nodes = append(result.Nodes, winners[key])
+		node := winners[key]
+		result.Nodes = append(result.Nodes, node)
+		delete(allNodes, node.ID)
 	}
-	sort.Slice(additive, func(i, j int) bool { return additive[i].ID < additive[j].ID })
-	result.Nodes = append(result.Nodes, additive...)
+	remaining := make([]model.ConfigNode, 0, len(allNodes))
+	for _, node := range allNodes {
+		remaining = append(remaining, node)
+	}
+	sort.Slice(remaining, func(i, j int) bool { return remaining[i].ID < remaining[j].ID })
+	result.Nodes = append(result.Nodes, remaining...)
 	return result
 }

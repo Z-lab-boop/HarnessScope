@@ -56,6 +56,7 @@ func TestVerifiedFixtureResolvesProjectConfigurationAndInstructionChain(t *testi
 	if !hasEdgeType(effective.Edges, model.EdgeOverrides) {
 		t.Fatalf("missing override edge: %#v", effective.Edges)
 	}
+	assertEdgeEndpointsExist(t, effective.Nodes, effective.Edges)
 	for _, node := range effective.Nodes {
 		for _, value := range node.Attributes {
 			if strings.Contains(value.Display, "HARNESSSCOPE-CANARY") {
@@ -137,4 +138,17 @@ func hasEdgeType(edges []model.Edge, edgeType model.EdgeType) bool {
 		}
 	}
 	return false
+}
+
+func assertEdgeEndpointsExist(t *testing.T, nodes []model.ConfigNode, edges []model.Edge) {
+	t.Helper()
+	ids := make(map[string]bool, len(nodes))
+	for _, node := range nodes {
+		ids[node.ID] = true
+	}
+	for _, edge := range edges {
+		if !ids[edge.From] || !ids[edge.To] {
+			t.Fatalf("edge has missing endpoint: %#v", edge)
+		}
+	}
 }
