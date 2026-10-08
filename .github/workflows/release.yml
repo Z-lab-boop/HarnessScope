@@ -8,7 +8,13 @@ permissions:
   contents: write
 
 jobs:
+  gates:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   build:
+    needs: gates
     strategy:
       fail-fast: false
       matrix:
@@ -36,9 +42,11 @@ jobs:
           set -eu
           name="harnessscope_${VERSION}_${TARGET_OS}_${TARGET_ARCH}"
           mkdir -p "dist/$name"
-          CGO_ENABLED=0 GOOS="$TARGET_OS" GOARCH="$TARGET_ARCH" go build -trimpath -ldflags='-s -w' -o "dist/$name/hscope" ./cmd/hscope
-          cp LICENSE README.md README.zh-CN.md THIRD_PARTY_NOTICES.md "dist/$name/"
-          tar -C "dist/$name" -czf "dist/$name.tar.gz" hscope LICENSE README.md README.zh-CN.md THIRD_PARTY_NOTICES.md
+          ./scripts/check-third-party-notices.sh
+          CGO_ENABLED=0 GOOS="$TARGET_OS" GOARCH="$TARGET_ARCH" go build -trimpath -buildvcs=false -ldflags='-s -w' -o "dist/$name/hscope" ./cmd/hscope
+          cp LICENSE README.md README.zh-CN.md THIRD_PARTY_NOTICES.md SECURITY.md "dist/$name/"
+          cp -R docs "dist/$name/docs"
+          tar -C "dist/$name" -czf "dist/$name.tar.gz" hscope LICENSE README.md README.zh-CN.md THIRD_PARTY_NOTICES.md SECURITY.md docs
       - name: Smoke compatible artifact
         if: matrix.os == 'linux' && matrix.arch == 'amd64'
         env:

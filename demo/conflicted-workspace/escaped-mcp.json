@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "shared": { "command": "harnessscope-demo-divergent-command" }
+  }
+}

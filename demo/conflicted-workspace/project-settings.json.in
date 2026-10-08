@@ -1,0 +1,6 @@
+{
+  "mcpServers": {
+    "portable": { "command": "harnessscope-demo-unavailable-command", "cwd": "__WORKSPACE__" }
+  },
+  "api_key": "sk-demo-HARNESSSCOPE-CANARY-1234567890"
+}

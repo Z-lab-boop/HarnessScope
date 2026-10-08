@@ -278,10 +278,18 @@ test("captures the dashboard for local visual inspection without updating a base
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(`${base}/#token=${token}`);
   await expect(page.getByRole("button", { name: "Inspect codex" })).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath("overview-local.png") });
+  await page.screenshot({ path: testInfo.outputPath("overview-local.png"), fullPage: true });
   await page.setViewportSize({ width: 768, height: 900 });
   await page.screenshot({ path: testInfo.outputPath("overview-768-local.png"), fullPage: true });
   expect(errors).toEqual([]);
+});
+
+test("reviewed Linux dashboard visual baseline", async ({ page }) => {
+  test.skip(process.platform !== "linux" || process.env.HARNESSSCOPE_REVIEWED_LINUX_BASELINE !== "1", "OPEN: no reviewed Linux baseline; see docs/visual-baselines.md");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(`${base}/#token=${token}`);
+  await expect(page.getByRole("button", { name: "Inspect codex" })).toBeVisible();
+  await expect(page).toHaveScreenshot("dashboard-linux.png", { fullPage: true, maxDiffPixelRatio: 0.03 });
 });
 
 test("dashboard source avoids HTML string injection sinks", async () => {

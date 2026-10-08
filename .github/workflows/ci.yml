@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
@@ -27,13 +28,19 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm --prefix web ci
       - run: npm --prefix web run build
-      - run: git diff --exit-code -- internal/report/assets
+      - run: git diff --exit-code -- internal/report/assets internal/server/assets
+      - run: npx --prefix web tsc --noEmit -p web/tsconfig.json
+      - run: node scripts/check-repository.mjs
+      - run: for script in scripts/*.sh demo/*.sh; do sh -n "$script"; done
       - run: go test ./...
       - run: go test -race ./...
       - run: go vet ./...
       - run: go build -trimpath -o bin/hscope ./cmd/hscope
       - run: ./scripts/smoke-release.sh ./bin/hscope
       - run: ./scripts/check-third-party-notices.sh
+      - run: node scripts/check-notices-test.mjs
+      - run: ./demo/run.sh
+      - run: node scripts/check-demo-lifecycle.mjs
       - if: runner.os == 'Linux'
         working-directory: web
         run: npx playwright install --with-deps chromium
@@ -41,14 +48,55 @@ jobs:
         working-directory: web
         run: npx playwright install chromium
       - run: npm --prefix web run test:visual
+      - run: npm --prefix web run test:dashboard
+      - name: Four-target archives, checksums and native fresh-extract smoke
+        run: |
+          output=$(mktemp -d)
+          ./scripts/build-release.sh v0.2.0-ci "$output"
+          (cd "$output" && shasum -a 256 -c SHA256SUMS)
+          unpack=$(mktemp -d)
+          os=$(go env GOOS)
+          arch=$(go env GOARCH)
+          tar -C "$unpack" -xzf "$output/harnessscope_v0.2.0-ci_${os}_${arch}.tar.gz"
+          ./scripts/smoke-release.sh "$unpack/hscope"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-evidence-${{ runner.os }}
+          path: web/test-results
 
   repository-safety:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Reject synthetic canaries outside allowed inputs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/check-repository.mjs
+
+  reviewed-linux-visual-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require reviewed Linux artifacts (currently OPEN)
         run: |
-          matches=$(grep -RIl 'HARNESSSCOPE-CANARY' . --exclude-dir=.git || true)
-          printf '%s\n' "$matches"
-          unexpected=$(printf '%s\n' "$matches" | grep -Ev '^(./fixtures/|./demo/conflicted-workspace/|./demo/run.sh|./internal/.+_test.go|./scripts/smoke-release.sh|./docs/|./README|./CONTRIBUTING.md|./SECURITY.md|./THIRD_PARTY_NOTICES.md|./.github/workflows/ci.yml)' || true)
-          test -z "$unexpected"
+          test -f web/tests/__snapshots__/report-linux.png && test -f web/dashboard/tests/__snapshots__/dashboard-linux.png || {
+            echo '::error::OPEN: reviewed Linux visual baselines are absent; see docs/visual-baselines.md'
+            exit 1
+          }
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm --prefix web ci
+      - run: npm --prefix web run build
+      - run: go build -trimpath -o bin/hscope ./cmd/hscope
+      - run: npx --prefix web playwright install --with-deps chromium
+      - name: Compare reviewed Linux images; never generate during release
+        env:
+          HARNESSSCOPE_REVIEWED_LINUX_BASELINE: '1'
+        run: |
+          npm --prefix web run test:visual
+          npm --prefix web run test:dashboard

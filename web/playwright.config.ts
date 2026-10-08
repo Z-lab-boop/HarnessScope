@@ -7,6 +7,7 @@ export default defineConfig({
   use: {
     ...devices["Desktop Chrome"],
     viewport: { width: 1440, height: 1000 },
+    channel: process.env.PLAYWRIGHT_CHANNEL,
   },
   projects: [{ name: "chromium", use: { browserName: "chromium" } }],
 });

@@ -21,7 +21,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	instance, err := server.Start(context.Background(), server.HTTPConfig{Service: s})
+	instance, err := server.Start(context.Background(), server.HTTPConfig{Service: s, ToolVersion: "0.2.0"})
 	if err != nil {
 		panic(err)
 	}

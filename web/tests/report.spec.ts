@@ -26,9 +26,12 @@ test("report stays offline and keyboard accessible", async ({ page }) => {
   await expect(page.locator("#raw-data")).toContainText('"schema_version": "1.0.0"');
   await page.getByRole("button", { name: "Toggle embedded JSON" }).click();
   expect(requests).toEqual([]);
-  if (process.platform === "linux") {
-    await expect(page).toHaveScreenshot("report.png", { fullPage: true, maxDiffPixelRatio: 0.03 });
-  }
+});
+
+test("reviewed Linux report visual baseline", async ({ page }) => {
+  test.skip(process.platform !== "linux" || process.env.HARNESSSCOPE_REVIEWED_LINUX_BASELINE !== "1", "OPEN: no reviewed Linux baseline; see docs/visual-baselines.md");
+  await page.goto(pathToFileURL(output).href);
+  await expect(page).toHaveScreenshot("report-linux.png", { fullPage: true, maxDiffPixelRatio: 0.03 });
 });
 
 test("report remains readable without JavaScript", async ({ browser }) => {
