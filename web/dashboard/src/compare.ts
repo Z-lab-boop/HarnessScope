@@ -25,6 +25,7 @@ export function renderCompare(state: Readonly<UIState>, actions: Actions): HTMLE
   controls.append(select("Left client", clients, left, (value) => actions.update({ views: { ...views, left: value } }), false), select("Right client", clients, right, (value) => actions.update({ views: { ...views, right: value } }), false)); panel.append(controls);
   panel.append(element("p", "Matched by type and display name. Comparison uses redacted attributes; hidden secret values cannot be compared.", "muted"));
   const table = element("table", "", "compare-table"), head = element("thead"), header = element("tr");
+  table.append(element("caption", `Configuration comparison: ${left} and ${right}`));
   for (const title of ["Type / name", left, right, "Result"]) { const cell = element("th", title); cell.scope = "col"; header.append(cell); } head.append(header); table.append(head);
   const body = element("tbody");
   const rows = normalize(state.dashboard?.result.analysis.graph.nodes ?? [], left, right);

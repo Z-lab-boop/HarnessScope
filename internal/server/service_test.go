@@ -19,6 +19,41 @@ import (
 	"github.com/Z-lab-boop/harnessscope/internal/model"
 )
 
+func TestServiceApplyReplansOverlappingContentAndMode(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "hook.sh")
+	noncanonical := root + "/./hook.sh"
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nkeep\nkeep\n# "+noncanonical+"\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	s, err := NewService(ServiceConfig{Workspace: root, HomeDir: root, AppDataDir: filepath.Join(root, "data"), Scan: func(context.Context) (model.ScanResult, error) {
+		return model.ScanResult{Analysis: model.Analysis{Sources: []model.ConfigSource{{ID: "hook", CanonicalPath: path, LogicalPath: path, Exists: true, Readable: true}}, Graph: model.Graph{Nodes: []model.ConfigNode{
+			{ID: "hook", Type: model.NodeHook, Attributes: map[string]model.SafeValue{"command": {Display: path, Present: true}}},
+			{ID: "path", Attributes: map[string]model.SafeValue{"path": {Display: noncanonical, Present: true}}, Origins: []model.Origin{{SourceID: "hook"}}},
+		}}}}, nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := s.State()
+	if len(before.FixPlans) != 3 {
+		t.Fatalf("plans: %+v", before.FixPlans)
+	}
+	state, err := s.ApplyFixes(context.Background(), 1, []string{before.FixPlans[0].ID, before.FixPlans[1].ID, before.FixPlans[2].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(path)
+	info, _ := os.Stat(path)
+	canonical, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "#!/bin/sh\nkeep\n# "+canonical+"\n" || info.Mode().Perm() != 0o751 || state.Revision != 2 || len(state.Backups) != 3 || len(state.FixPlans) != 0 {
+		t.Fatalf("overlapping fixes not published together: %+v mode=%o", state, info.Mode().Perm())
+	}
+}
+
 func TestServiceApplyRollbackOrderRestoresOverlappingTransactions(t *testing.T) {
 	root := t.TempDir()
 	script := filepath.Join(root, "hook.sh")
@@ -436,7 +471,7 @@ func TestServiceSnapshotDriftAndExportUsePublicState(t *testing.T) {
 		}
 		if file.Name == "report.json" {
 			found = true
-			if !bytes.Contains(data, []byte("remove duplicate line: keep")) {
+			if !bytes.Contains(data, []byte("remove duplicate line: [REDACTED]")) || bytes.Contains(data, []byte("remove duplicate line: keep")) {
 				t.Fatal("export rescanned raw workspace")
 			}
 		}

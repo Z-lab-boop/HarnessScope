@@ -118,6 +118,7 @@ func (s *Service) PlanFixes(ctx context.Context, expectedRevision uint64, ids []
 	if public.Analysis.FixPlans == nil {
 		return []model.FixPlan{}, nil
 	}
+	redactPublicPlans(public.Analysis.FixPlans)
 	return public.Analysis.FixPlans, nil
 }
 
@@ -192,7 +193,7 @@ func (s *Service) ApplyFixes(ctx context.Context, expectedRevision uint64, ids [
 		}
 		return DashboardState{}, cause
 	}
-	for _, plan := range plans {
+	for index, plan := range plans {
 		if err := ctx.Err(); err != nil {
 			return unwind(err)
 		}
@@ -220,6 +221,39 @@ func (s *Service) ApplyFixes(ctx context.Context, expectedRevision uint64, ids [
 			return unwind(err)
 		}
 		applied = append(applied, transaction.BackupID)
+		// Replan overlapping transactions against the verified result. Leave
+		// untouched targets pinned to their original hashes so concurrent edits
+		// still conflict instead of silently being accepted by a fresh plan.
+		if index+1 < len(plans) {
+			fresh, err := fixes.Plan(raw, nil)
+			if err != nil {
+				return unwind(err)
+			}
+			for next := index + 1; next < len(plans); next++ {
+				overlaps := false
+				for _, edit := range plans[next].Edits {
+					for _, path := range transaction.Paths {
+						if edit.TargetPath == path {
+							overlaps = true
+						}
+					}
+				}
+				if !overlaps {
+					continue
+				}
+				found := false
+				for _, candidate := range fresh {
+					if sameFixIntent(plans[next], candidate) {
+						plans[next] = candidate
+						found = true
+						break
+					}
+				}
+				if !found {
+					return unwind(fixes.ErrTargetChanged)
+				}
+			}
+		}
 	}
 	owned, state, err := s.prepare(raw, expectedRevision+1)
 	if err != nil {
@@ -467,6 +501,35 @@ func (s *Service) ListSnapshots(ctx context.Context) ([]snapshots.Metadata, erro
 	return items, err
 }
 
+// Match a selected fix after earlier edits shifted offsets (and therefore IDs).
+// Do not widen the selection to a different operation, source or replacement.
+func sameFixIntent(previous, next model.FixPlan) bool {
+	if next.Risk != model.RiskSafe || len(previous.Edits) != len(next.Edits) {
+		return false
+	}
+	for i, edit := range previous.Edits {
+		candidate := next.Edits[i]
+		if edit.TargetPath != candidate.TargetPath || edit.SourceID != candidate.SourceID || edit.Operation != candidate.Operation || edit.Replacement != candidate.Replacement || edit.ResultMode != candidate.ResultMode {
+			return false
+		}
+	}
+	return true
+}
+
+// Browser/report plans describe operations without publishing instruction bytes
+// or replacement payloads. Raw plans stay private and are rebuilt before apply.
+func redactPublicPlans(plans []model.FixPlan) {
+	for i := range plans {
+		for j := range plans[i].Edits {
+			edit := &plans[i].Edits[j]
+			edit.Replacement = ""
+			if edit.Operation == "remove_byte_range" {
+				edit.RedactedPatch = "remove duplicate line: [REDACTED]"
+			}
+		}
+	}
+}
+
 func (s *Service) prepare(raw model.ScanResult, revision uint64) (model.ScanResult, DashboardState, error) {
 	data, err := model.MarshalCanonical(raw)
 	if err != nil {
@@ -496,6 +559,7 @@ func (s *Service) prepare(raw model.ScanResult, revision uint64) (model.ScanResu
 	if safePlans == nil {
 		safePlans = []model.FixPlan{}
 	}
+	redactPublicPlans(safePlans)
 	state := DashboardState{SchemaVersion: DashboardSchemaVersion, Revision: revision,
 		ScannedAt: s.config.Clock().UTC().Format(time.RFC3339Nano), Workspace: ".",
 		Result: public, FixPlans: safePlans, Backups: backups}

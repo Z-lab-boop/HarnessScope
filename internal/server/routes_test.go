@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Z-lab-boop/harnessscope/internal/model"
 	"github.com/Z-lab-boop/harnessscope/internal/snapshots"
@@ -108,6 +109,95 @@ func TestRoutesReadContracts(t *testing.T) {
 		if e.Code == "" || e.Message == "" || e.Details == nil {
 			t.Fatal("unstable error envelope")
 		}
+	}
+}
+
+func TestRoutesFixPrivacyRoundTrip(t *testing.T) {
+	s, paths, _ := serviceFixture(t, 1, nil)
+	original := []byte("PRIVATE_INSTRUCTION_CANARY\nPRIVATE_INSTRUCTION_CANARY\napi_key=sk-canary-private-value-123456789\n")
+	if err := os.WriteFile(paths[0], original, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	session := fixedSession(t)
+	instance, err := Start(context.Background(), HTTPConfig{Service: s, Random: bytes.NewReader(bytes.Repeat([]byte{0xfb}, 32))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = instance.Close(context.Background()) })
+	base, _, _ := strings.Cut(instance.URL(), "/#")
+	client := &http.Client{Timeout: 3 * time.Second}
+	defer client.CloseIdleConnections()
+	request := func(method, path, body string, status int, target any) {
+		r, err := http.NewRequest(method, base+path, strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.Header.Set("X-HarnessScope-Token", session.Token())
+		r.Header.Set("Origin", base)
+		r.Header.Set("Content-Type", "application/json")
+		response, err := client.Do(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := io.ReadAll(response.Body)
+		response.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if response.StatusCode != status || response.Header.Get("Content-Type") != "application/json" {
+			t.Fatalf("%s: status=%d, want=%d", path, response.StatusCode, status)
+		}
+		if err := json.Unmarshal(data, target); err != nil {
+			t.Fatal(err)
+		}
+		for _, private := range []string{"PRIVATE_INSTRUCTION_CANARY", "sk-canary-private-value", s.config.Workspace, string(original), session.Token()} {
+			if bytes.Contains(data, []byte(private)) {
+				t.Fatalf("public response leaked source content via %s", path)
+			}
+		}
+	}
+	var state DashboardState
+	request("POST", "/api/v1/rescan", `{"revision":1}`, 200, &state)
+	var plans []model.FixPlan
+	request("POST", "/api/v1/fixes/plan", `{"revision":2}`, 200, &plans)
+	if len(plans) != 1 || plans[0].Risk != model.RiskSafe || plans[0].Edits[0].RedactedPatch == "" {
+		t.Fatal("missing SAFE preview")
+	}
+	id := plans[0].ID
+	var apiErr APIError
+	request("POST", "/api/v1/fixes/apply", fmt.Sprintf(`{"revision":1,"fix_ids":[%q]}`, id), 409, &apiErr)
+	if apiErr.Code != "stale_revision" {
+		t.Fatal(apiErr)
+	}
+	s.mu.Lock()
+	s.public.FixPlans[0].Risk = model.RiskReview
+	s.mu.Unlock()
+	request("POST", "/api/v1/fixes/apply", fmt.Sprintf(`{"revision":2,"fix_ids":[%q]}`, id), 422, &apiErr)
+	if apiErr.Code != "unsafe_fix" {
+		t.Fatal(apiErr)
+	}
+	s.mu.Lock()
+	s.public.FixPlans[0].Risk = model.RiskSafe
+	s.mu.Unlock()
+	request("POST", "/api/v1/fixes/apply", fmt.Sprintf(`{"revision":2,"fix_ids":[%q]}`, id), 200, &state)
+	if state.Revision != 3 || len(state.FixPlans) != 0 || len(state.Backups) != 1 {
+		t.Fatal("missing apply rescan/history")
+	}
+	data, _ := os.ReadFile(paths[0])
+	if bytes.Equal(data, original) {
+		t.Fatal("apply did not change file")
+	}
+	var backups []map[string]any
+	request("GET", "/api/v1/backups", "", 200, &backups)
+	if len(backups) != 1 || len(backups[0]) != 3 || backups[0]["file_count"] != float64(1) {
+		t.Fatalf("unsafe backup summary: %+v", backups)
+	}
+	request("POST", "/api/v1/rescan", `{"revision":3}`, 200, &state)
+	request("POST", "/api/v1/rollback", fmt.Sprintf(`{"revision":4,"backup_id":%q}`, backups[0]["id"]), 200, &state)
+	data, _ = os.ReadFile(paths[0])
+	info, _ := os.Stat(paths[0])
+	if !bytes.Equal(data, original) || info.Mode().Perm() != 0o640 || state.Revision != 5 || len(state.FixPlans) != 1 {
+		t.Fatal("rollback failed to restore bytes/mode/plan/revision")
 	}
 }
 

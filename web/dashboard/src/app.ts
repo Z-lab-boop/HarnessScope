@@ -5,6 +5,7 @@ import { renderGraph } from "./graph.js";
 import { renderFindings } from "./findings.js";
 import { renderCompare } from "./compare.js";
 import { renderInspector } from "./inspector.js";
+import { FixCenter } from "./fixes.js";
 import { emptyFilters, initialViews, type Actions } from "./views.js";
 
 const routes: Record<Route, string> = { overview: "Overview", graph: "Graph", findings: "Findings", compare: "Compare", fixes: "Fix Center", drift: "Drift", export: "Export" };
@@ -87,6 +88,7 @@ alert.setAttribute("role", "alert");
 const modalRoot = element("div");
 modalRoot.id = "modal-root";
 root.append(skip, rail, top, main, inspector, toast, alert, modalRoot);
+const fixes = new FixCenter(store, api, modalRoot, (message) => { toast.textContent = message; });
 
 function heading(title: string, subtitle: string): void {
   const header = element("div", "", "view-heading");
@@ -184,6 +186,9 @@ function render(state: Readonly<UIState>): void {
     else if (["graph", "findings", "compare"].includes(state.route)) {
       heading(routes[state.route], "Snapshot evidence · trace configuration and inspect its origins");
       main.append(state.route === "graph" ? renderGraph(state, actions) : state.route === "findings" ? renderFindings(state, actions) : renderCompare(state, actions));
+    } else if (state.route === "fixes") {
+      heading("Fix Center", "Preview SAFE operations, confirm changes, and restore local backups.");
+      main.append(fixes.render(state));
     } else {
       heading(routes[state.route], "Workspace evidence channel");
       const panel = section(`${routes[state.route]} workspace`, "boundary");
@@ -200,6 +205,7 @@ function render(state: Readonly<UIState>): void {
     }
   }
   inspector.replaceChildren(renderInspector(state));
+  fixes.sync(state);
   const graphNodes = Array.from(main.querySelectorAll<SVGGElement>("[data-node-id]"));
   const selectedVisible = graphNodes.some((node) => node.dataset.nodeId === state.selection);
   graphNodes.forEach((node, index) => {

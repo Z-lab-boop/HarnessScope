@@ -388,8 +388,25 @@ test("findings combine all filters and focus the referenced graph node", async (
   await expect(page.getByRole("complementary", { name: "Inspector" })).toContainText("When workspace opens");
 });
 
+test("filtering away the selected graph node leaves a keyboard entry point", async ({ page }) => {
+  await page.goto(`${base}/?view=graph#token=${token}`);
+  await page.locator('[data-node-id="a-rule"]').focus();
+  await page.keyboard.press("Enter");
+  await page.getByRole("searchbox", { name: "Search graph" }).fill("local-only");
+  const visible = page.locator('[data-node-id="b-skill"]');
+  await expect(visible).toHaveAttribute("tabindex", "0");
+  await expect(page.locator('[data-node-id="a-rule"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "Reset graph view" }).focus();
+  await page.keyboard.press("Tab");
+  await expect(visible).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(visible).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("complementary", { name: "Inspector" })).toContainText("local-only");
+});
+
 test("compare normalizes by type and name and exposes presence and divergence without secrets", async ({ page }) => {
   await page.goto(`${base}/?view=compare#token=${token}`);
+  await expect(page.getByRole("table", { name: "Configuration comparison: codex and opencode" })).toBeVisible();
   await expect(page.getByRole("row", { name: /RULE shared.*Divergent/ })).toBeVisible();
   await expect(page.getByRole("row", { name: /SKILL local-only.*Missing/ })).toContainText("Missing in opencode");
   await expect(page.getByRole("row", { name: /MCP_SERVER same service.*Present/ })).toBeVisible();
