@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://harnessscope.dev/schemas/dashboard-state-v1.schema.json",
+  "title": "HarnessScope dashboard state v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "revision", "scanned_at", "workspace", "result", "fix_plans", "backups"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "revision": { "type": "integer", "minimum": 1, "maximum": 18446744073709551615 },
+    "scanned_at": { "type": "string", "format": "date-time" },
+    "workspace": { "const": "." },
+    "result": { "$ref": "report-v1.schema.json" },
+    "fix_plans": { "type": "array", "items": { "$ref": "fix-plan-v1.schema.json" } },
+    "backups": { "type": "array", "items": { "$ref": "#/$defs/backup" } },
+    "drift": { "$ref": "drift-v1.schema.json" }
+  },
+  "$defs": {
+    "backup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "created_at", "file_count"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{16}$" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "file_count": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
