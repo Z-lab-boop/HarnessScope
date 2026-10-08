@@ -1,0 +1,9 @@
+{
+  "instructions": ["CONTRIBUTING.md", ".cursor/rules/*.mdc"],
+  "mcp": {
+    "project": {
+      "type": "local",
+      "command": ["npx", "-y", "fixture-server"]
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "shared": {
+      "command": "/missing/cursor-mcp",
+      "env": { "API_KEY": "HARNESSSCOPE-CANARY-CURSOR" }
+    }
+  }
+}

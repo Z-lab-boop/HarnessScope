@@ -11,6 +11,8 @@ import (
 	"github.com/Z-lab-boop/harnessscope/internal/adapters"
 	"github.com/Z-lab-boop/harnessscope/internal/adapters/claude"
 	"github.com/Z-lab-boop/harnessscope/internal/adapters/codex"
+	"github.com/Z-lab-boop/harnessscope/internal/adapters/cursor"
+	"github.com/Z-lab-boop/harnessscope/internal/adapters/opencode"
 	"github.com/Z-lab-boop/harnessscope/internal/analyzers"
 	"github.com/Z-lab-boop/harnessscope/internal/discovery"
 	"github.com/Z-lab-boop/harnessscope/internal/model"
@@ -38,7 +40,9 @@ func DefaultRuntime() (*Runtime, error) {
 	}
 	redactor := secrets.NewRedactor()
 	return &Runtime{
-		Registry:    adapters.NewRegistry(codex.New(env, redactor), claude.New(env, redactor)),
+		Registry: adapters.NewRegistry(
+			codex.New(env, redactor), claude.New(env, redactor), cursor.New(env, redactor), opencode.New(env, redactor),
+		),
 		Environment: env,
 		OpenPath:    platformOpen(env.GOOS),
 	}, nil

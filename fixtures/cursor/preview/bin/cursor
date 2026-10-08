@@ -1,0 +1,2 @@
+#!/bin/sh
+printf '%s\n' 'cursor 9.9.9-preview-fixture'

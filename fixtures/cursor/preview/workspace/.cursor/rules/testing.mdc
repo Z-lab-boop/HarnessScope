@@ -1,0 +1,6 @@
+---
+description: Fixture test guidance
+alwaysApply: true
+---
+
+Run the fixture tests before committing.

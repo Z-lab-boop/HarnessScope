@@ -1,0 +1,11 @@
+{
+  // JSONC is documented by OpenCode.
+  "model": "fixture/model",
+  "mcp": {
+    "shared": {
+      "type": "local",
+      "command": ["/missing/opencode-mcp"],
+      "environment": { "TOKEN": "HARNESSSCOPE-CANARY-OPENCODE" },
+    },
+  },
+}

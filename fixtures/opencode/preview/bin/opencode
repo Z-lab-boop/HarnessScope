@@ -1,0 +1,2 @@
+#!/bin/sh
+printf '%s\n' 'opencode 8.8.8-preview-fixture'
