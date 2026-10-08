@@ -26,6 +26,9 @@ type Input struct {
 	ToolVersion string
 	Report      model.ScanResult
 	Drift       *snapshots.Diff
+	// Exact process credentials are removed from all source strings before
+	// report generation, base64 embedding, manifest construction and hashing.
+	ForbiddenStrings []string `json:"-"`
 }
 type ClientTier struct {
 	ID   string           `json:"id"`
@@ -76,6 +79,27 @@ func (e *Exporter) Write(ctx context.Context, output io.Writer, input Input) (Ma
 	}
 	if err := validateMetadata(input); err != nil {
 		return Manifest{}, err
+	}
+	if len(input.ForbiddenStrings) != 0 {
+		forbidden := input.ForbiddenStrings
+		data, err := secrets.MapJSONStrings(input, func(value string) string {
+			for _, exact := range forbidden {
+				if exact != "" {
+					value = strings.ReplaceAll(value, exact, "[REDACTED]")
+				}
+			}
+			return value
+		})
+		if err != nil {
+			return Manifest{}, err
+		}
+		// Validation above applies to user-controlled metadata. Redacted markers
+		// may intentionally fall outside its input allowlists.
+		var safe Input
+		if err := json.Unmarshal(data, &safe); err != nil {
+			return Manifest{}, err
+		}
+		input = safe
 	}
 	generatedAt := e.clock().UTC()
 	var reportJSON, reportHTML bytes.Buffer

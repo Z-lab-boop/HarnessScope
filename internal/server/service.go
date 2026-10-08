@@ -321,10 +321,10 @@ func (s *Service) CompareSnapshot(ctx context.Context, expectedRevision uint64, 
 }
 
 func (s *Service) Export(ctx context.Context, expectedRevision uint64, output io.Writer, toolVersion string) (export.Manifest, error) {
-	return s.exportActive(ctx, expectedRevision, output, toolVersion, "")
+	return s.exportActive(ctx, expectedRevision, output, toolVersion, "", nil)
 }
 
-func (s *Service) exportActive(ctx context.Context, expectedRevision uint64, output io.Writer, toolVersion, baseline string) (export.Manifest, error) {
+func (s *Service) exportActive(ctx context.Context, expectedRevision uint64, output io.Writer, toolVersion, baseline string, forbiddenStrings []string) (export.Manifest, error) {
 	s.opMu.Lock()
 	defer s.opMu.Unlock()
 	if err := s.checkRevision(ctx, expectedRevision); err != nil {
@@ -342,7 +342,7 @@ func (s *Service) exportActive(ctx context.Context, expectedRevision uint64, out
 			return export.Manifest{}, ErrStaleRevision
 		}
 	}
-	return export.New(s.config.Clock).Write(ctx, output, export.Input{ToolVersion: toolVersion, Report: state.Result, Drift: state.Drift})
+	return export.New(s.config.Clock).Write(ctx, output, export.Input{ToolVersion: toolVersion, Report: state.Result, Drift: state.Drift, ForbiddenStrings: forbiddenStrings})
 }
 
 func (s *Service) snapshotStore() *snapshots.Store {

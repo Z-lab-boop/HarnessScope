@@ -4,6 +4,9 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/Z-lab-boop/harnessscope/internal/model"
+	"github.com/Z-lab-boop/harnessscope/internal/snapshots"
 )
 
 func routeRequest(t *testing.T, h http.Handler, session Session, method, target, body string, change func(*http.Request)) *httptest.ResponseRecorder {
@@ -433,5 +437,139 @@ func TestRoutesReadResponsesRescrubCredentialsAndSessionToken(t *testing.T) {
 		if !strings.Contains(w.Body.String(), "[REDACTED]") {
 			t.Fatal("fixture was not represented")
 		}
+	}
+}
+
+func TestRoutesRedactionCannotCrossJSONFieldBoundaries(t *testing.T) {
+	root := t.TempDir()
+	s, err := NewService(ServiceConfig{Workspace: root, HomeDir: filepath.Dir(root), AppDataDir: filepath.Join(root, "data"), Scan: func(context.Context) (model.ScanResult, error) {
+		return model.ScanResult{Analysis: model.Analysis{Graph: model.Graph{Nodes: []model.ConfigNode{{ID: "node-a", DisplayName: "https://alice", LoadCondition: "password@example.test"}}}}}, nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := fixedSession(t)
+	var detail ExplainResponse
+	routeJSON(t, routeRequest(t, NewHandler(s, session), session, "GET", "/api/v1/explain?id=node-a", "", nil), 200, &detail)
+	if detail.Node.DisplayName != "https://alice" || detail.Node.LoadCondition != "password@example.test" {
+		t.Fatal("unrelated string fields were merged during redaction")
+	}
+	// Keys are scrubbed individually too, and large integer revisions retain precision.
+	w := httptest.NewRecorder()
+	writeJSON(w, 200, map[string]any{"sk-abcdefghijklmnopqrstuvwxyz": "secret-key", "revision": uint64(9007199254740993)}, "")
+	var fields map[string]json.RawMessage
+	routeJSON(t, w, 200, &fields)
+	if _, ok := fields["[REDACTED]"]; !ok || string(fields["revision"]) != "9007199254740993" {
+		t.Fatal("key redaction or integer precision lost")
+	}
+}
+
+func TestRoutesExportRemovesSessionTokenBeforeHashing(t *testing.T) {
+	root := t.TempDir()
+	// An ordinary alphabetic 43-character base64url token also fits metadata IDs.
+	session, err := NewSession(bytes.NewReader(bytes.Repeat([]byte{0x11}, 32)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := session.Token()
+	s, err := NewService(ServiceConfig{Workspace: root, HomeDir: filepath.Dir(root), AppDataDir: filepath.Join(root, "data"), Scan: func(context.Context) (model.ScanResult, error) {
+		return model.ScanResult{SchemaVersion: model.ReportSchemaVersion, Analysis: model.Analysis{
+			Clients: []model.ClientResult{{ID: token, Compatibility: model.CompatibilityMetadata{Tier: model.TierVerified}}},
+			Graph:   model.Graph{Nodes: []model.ConfigNode{{ID: "node-a", DisplayName: token, Attributes: map[string]model.SafeValue{token: {Display: "nested " + token}}}}},
+		}}, nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.mu.Lock()
+	s.public.Drift = &snapshots.Diff{SchemaVersion: snapshots.SchemaVersion, Baseline: token, Changes: []snapshots.Change{{Kind: snapshots.ChangeAdded, EntityType: snapshots.EntityNode, ID: token, Summary: "node " + token + " added"}}}
+	s.mu.Unlock()
+	w := routeRequest(t, newHandler(s, session, nil, token), session, "POST", "/api/v1/export", fmt.Sprintf(`{"revision":1,"baseline":%q}`, token), nil)
+	if w.Code != 200 {
+		t.Fatalf("export status %d: %s", w.Code, w.Body.String())
+	}
+	archive, err := zip.NewReader(bytes.NewReader(w.Body.Bytes()), int64(w.Body.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	members := map[string][]byte{}
+	for _, file := range archive.File {
+		r, err := file.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := io.ReadAll(r)
+		r.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		members[file.Name] = data
+		if bytes.Contains(data, []byte(token)) {
+			t.Errorf("session token leaked in %s", file.Name)
+		}
+		if strings.HasSuffix(file.Name, ".json") && !json.Valid(data) {
+			t.Errorf("invalid JSON member %s", file.Name)
+		}
+	}
+	// Decode the offline report's embedded JSON, not only visible HTML text.
+	html := string(members["report.html"])
+	start := strings.Index(html, `data-encoding="base64">`)
+	if start < 0 {
+		t.Fatal("embedded report missing")
+	}
+	encoded := html[start+len(`data-encoding="base64">`):]
+	encoded = strings.SplitN(encoded, "</script>", 2)[0]
+	embedded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(embedded, []byte(token)) {
+		t.Error("token leaked through embedded JSON")
+	}
+	var manifest struct {
+		Members []struct{ Name, SHA256 string }
+	}
+	if err := json.Unmarshal(members["manifest.json"], &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Members) != 4 {
+		t.Fatalf("missing manifest members: %+v", manifest)
+	}
+	for _, item := range manifest.Members {
+		sum := sha256.Sum256(members[item.Name])
+		if item.SHA256 != hex.EncodeToString(sum[:]) {
+			t.Errorf("stale hash: %s", item.Name)
+		}
+	}
+	if s.State().Revision != 1 || s.State().Drift.Baseline != token {
+		t.Fatal("export mutated public state")
+	}
+}
+
+func TestRoutesConcurrentFixTargetChangeReturnsConflict(t *testing.T) {
+	var secondTarget string
+	s, _, _ := serviceFixture(t, 2, func(n int) error {
+		if n == 3 {
+			return os.WriteFile(secondTarget, []byte("concurrent edit\n"), 0o640)
+		}
+		return nil
+	})
+	state := s.State()
+	firstTarget := filepath.Join(s.config.Workspace, state.FixPlans[0].Edits[0].TargetPath)
+	secondTarget = filepath.Join(s.config.Workspace, state.FixPlans[1].Edits[0].TargetPath)
+	body, err := json.Marshal(ApplyRequest{Revision: 1, FixIDs: []string{state.FixPlans[0].ID, state.FixPlans[1].ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := fixedSession(t)
+	var apiErr APIError
+	routeJSON(t, routeRequest(t, NewHandler(s, session), session, "POST", "/api/v1/fixes/apply", string(body), nil), 409, &apiErr)
+	if apiErr.Code != "target_changed" || s.State().Revision != 1 {
+		t.Fatalf("wrong conflict handling: %+v", apiErr)
+	}
+	first, _ := os.ReadFile(firstTarget)
+	second, _ := os.ReadFile(secondTarget)
+	if string(first) != "keep\nkeep\n" || string(second) != "concurrent edit\n" {
+		t.Fatal("conflict failed to preserve rollback or concurrent edit")
 	}
 }

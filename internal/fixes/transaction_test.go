@@ -101,8 +101,11 @@ func TestApplyRefusesConcurrentModification(t *testing.T) {
 	}
 
 	_, err = Apply(context.Background(), plan, filepath.Join(root, "backups"), nil)
-	if err == nil || !strings.Contains(err.Error(), "changed since") {
+	if !errors.Is(err, ErrTargetChanged) {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "backups")); !os.IsNotExist(err) {
+		t.Fatal("conflicting target created a backup")
 	}
 }
 

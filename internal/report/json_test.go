@@ -2,11 +2,27 @@ package report
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/Z-lab-boop/harnessscope/internal/model"
 )
+
+func TestWriteJSONPreservesDefaultSchemaAndCrossFieldStrings(t *testing.T) {
+	var output bytes.Buffer
+	result := model.ScanResult{Analysis: model.Analysis{Graph: model.Graph{Nodes: []model.ConfigNode{{ID: "node-a", DisplayName: "https://alice", LoadCondition: "password@example.test"}}}}}
+	if err := WriteJSON(&output, result); err != nil {
+		t.Fatal(err)
+	}
+	var decoded model.ScanResult
+	if err := json.Unmarshal(output.Bytes(), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.SchemaVersion != model.ReportSchemaVersion || decoded.Analysis.Graph.Nodes[0].DisplayName != "https://alice" || decoded.Analysis.Graph.Nodes[0].LoadCondition != "password@example.test" {
+		t.Fatalf("report contract changed: %+v", decoded)
+	}
+}
 
 func TestWriteJSONIsCanonicalAndSecretSafe(t *testing.T) {
 	first := model.ScanResult{SchemaVersion: model.ReportSchemaVersion, Analysis: model.Analysis{Findings: []model.Finding{

@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/Z-lab-boop/harnessscope/internal/fixes"
 	"github.com/Z-lab-boop/harnessscope/internal/secrets"
 )
 
@@ -202,7 +203,7 @@ func (a *apiHandler) export(w http.ResponseWriter, r *http.Request) {
 	}
 	// Complete validation before committing download headers or any ZIP bytes.
 	var output bytes.Buffer
-	if _, err := a.service.exportActive(r.Context(), body.Revision, &output, a.toolVersion, body.Baseline); err != nil {
+	if _, err := a.service.exportActive(r.Context(), body.Revision, &output, a.toolVersion, body.Baseline, []string{a.session.Token()}); err != nil {
 		a.result(w, nil, err)
 		return
 	}
@@ -223,6 +224,8 @@ func (a *apiHandler) result(w http.ResponseWriter, value any, err error) {
 	switch {
 	case errors.Is(err, ErrStaleRevision):
 		writeAPIError(w, 409, "stale_revision", "The dashboard revision or active baseline changed. Refresh and retry.")
+	case errors.Is(err, fixes.ErrTargetChanged):
+		writeAPIError(w, 409, "target_changed", "A fix target changed. Rescan and retry.")
 	case errors.Is(err, ErrInvalidRequest):
 		writeAPIError(w, 400, "invalid_request", "The request is invalid.")
 	case errors.Is(err, ErrNotFound):
@@ -259,17 +262,19 @@ func writeAPIError(w http.ResponseWriter, status int, code, message string) {
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any, sessionToken string) {
-	data, err := json.Marshal(value)
+	redactor := secrets.NewRedactor()
+	data, err := secrets.MapJSONStrings(value, func(text string) string {
+		text = redactor.ScrubText(text)
+		if sessionToken != "" {
+			text = strings.ReplaceAll(text, sessionToken, "[REDACTED]")
+		}
+		return text
+	})
 	if err != nil {
 		status = 500
 		data = []byte(`{"code":"internal_error","message":"An internal error occurred.","details":{}}`)
 	}
-	// Match the report writer's final credential pass, including free text.
-	text := secrets.NewRedactor().ScrubText(string(data))
-	if sessionToken != "" {
-		text = strings.ReplaceAll(text, sessionToken, "[REDACTED]")
-	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_, _ = io.WriteString(w, text+"\n")
+	_, _ = w.Write(append(data, '\n'))
 }

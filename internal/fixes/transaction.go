@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,9 @@ import (
 )
 
 type VerifyFunc func(context.Context, []string) error
+
+// ErrTargetChanged marks a conflict with the bytes used to build a fix plan.
+var ErrTargetChanged = errors.New("target changed since the fix was planned")
 
 type TransactionResult struct {
 	BackupID string
@@ -44,7 +48,7 @@ func Apply(ctx context.Context, plan model.FixPlan, backupRoot string, verify Ve
 			return TransactionResult{}, fmt.Errorf("read fix target: %w", err)
 		}
 		if hashBytes(data) != edit.ExpectedHash {
-			return TransactionResult{}, fmt.Errorf("target changed since the fix was planned")
+			return TransactionResult{}, ErrTargetChanged
 		}
 	}
 	backupID, err := newBackupID()

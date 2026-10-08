@@ -34,10 +34,13 @@ func ReadJSON(input io.Reader) (model.ScanResult, error) {
 }
 
 func safeCanonicalJSON(result model.ScanResult) ([]byte, error) {
-	data, err := model.MarshalCanonical(result)
+	data, err := secrets.MapJSONStrings(result, secrets.NewRedactor().ScrubText)
 	if err != nil {
 		return nil, err
 	}
-	scrubbed := secrets.NewRedactor().ScrubText(string(data))
-	return []byte(scrubbed), nil
+	var safe model.ScanResult
+	if err := json.Unmarshal(data, &safe); err != nil {
+		return nil, err
+	}
+	return model.MarshalCanonical(safe)
 }
