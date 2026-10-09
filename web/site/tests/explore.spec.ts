@@ -210,6 +210,30 @@ test("demo schema privacy rejects absolute paths, emails, URLs and credential ca
   }
 });
 
+test("demo schema privacy rejects quoted credential assignments in every display field", () => {
+  const assignments = [
+    '"api_key": "fictional-private-value"',
+    '"access_token": "fictional-private-value"',
+    "'api_key': 'fictional-private-value'",
+    "'access_token': 'fictional-private-value'",
+    '{"API_KEY": "fictional-private-value"}',
+    "{'AcCeSs-ToKeN' : 'fictional-private-value'}",
+    '"session_token" = "fictional-private-value"',
+    "'PASSWORD' = 'fictional-private-value'",
+    '"secret"\t:\t"fictional-private-value"',
+  ];
+  for (const assignment of assignments) {
+    for (const field of ["label", "conflictTitle", "fixTitle", "patch"]) {
+      const demo = fixture();
+      if (field === "label") demo.nodes[0].label = assignment;
+      if (field === "conflictTitle") demo.conflict.title = assignment;
+      if (field === "fixTitle") demo.fix_preview.title = assignment;
+      if (field === "patch") demo.fix_preview.patch[0] = `+ ${assignment}`;
+      expect(() => parseDemo(demo), `${field}: ${assignment}`).toThrow("Invalid synthetic demo");
+    }
+  }
+});
+
 test("Explore uses validated dataset text safely without interpreting HTML", async ({ page }) => {
   const demo = fixture();
   demo.nodes[0].label = '<img src=x onerror="alert(1)">';

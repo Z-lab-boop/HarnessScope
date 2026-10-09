@@ -15,7 +15,7 @@ function text(value: unknown): string {
   // Validate every displayable string, including patch lines and finding titles.
   if (/(?:^|[^a-z\d_.-])(?:\/|[a-z]:[\\/]|~(?:[^\s]*[\\/]|$)|\\)/i.test(value)
     || /(?:[a-z][a-z\d+.-]*:\/\/|\b(?:https?|ftp|file|data|mailto|javascript|ssh):|www\.|[\w.+-]+@[\w.-]+\.[a-z]{2,})/i.test(value)
-    || /(?:sk-|gh[pousr]_|github_pat_|AKIA[A-Z\d]{12}|ASIA[A-Z\d]{12}|xox[baprs]-|-----BEGIN .*PRIVATE KEY|\bBearer\s+\S+|\beyJ[\w-]+\.[\w-]+\.[\w-]+|\b(?:session[_-]?token|api[_-]?key|access[_-]?token|password|secret)\s*[:=]\s*\S+)/i.test(value)) invalid();
+    || /(?:sk-|gh[pousr]_|github_pat_|AKIA[A-Z\d]{12}|ASIA[A-Z\d]{12}|xox[baprs]-|-----BEGIN .*PRIVATE KEY|\bBearer\s+\S+|\beyJ[\w-]+\.[\w-]+\.[\w-]+|\b(?:session[_-]?token|api[_-]?key|access[_-]?token|password|secret)\s*["']?\s*[:=]\s*\S+)/i.test(value)) invalid();
   return value;
 }
 function choice<T extends string>(value: unknown, allowed: readonly T[]): T {
