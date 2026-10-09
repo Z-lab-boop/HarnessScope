@@ -74,7 +74,7 @@ func (a *Adapter) discoverSkills(root string, scope model.Scope) []model.ConfigS
 
 func projectRoot(ancestors []string) string {
 	for _, directory := range ancestors {
-		if info, err := os.Stat(filepath.Join(directory, ".git")); err == nil && info.IsDir() {
+		if info, err := os.Stat(filepath.Join(directory, ".git")); err == nil && (info.IsDir() || info.Mode().IsRegular()) {
 			return directory
 		}
 	}
