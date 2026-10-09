@@ -9,7 +9,8 @@
     "test:visual": "playwright test",
     "test:dashboard": "playwright test --config dashboard/playwright.config.ts",
     "build:site": "node site/build.mjs",
-    "test:site": "npm run build:site && playwright test --config site/playwright.config.ts"
+    "test:site": "npm run build:site && playwright test --config site/playwright.config.ts",
+    "capture:site": "npm run build:site && node site/capture.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",

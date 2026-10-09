@@ -19,6 +19,7 @@
     </nav>
   </header>
   <main id="main" tabindex="-1" class="docs-page">
+    <div data-capture="docs">
     <section class="docs-intro" aria-labelledby="page-title">
       <div><p class="eyebrow technical" data-i18n="docs.kicker">Local installation · explicit boundaries</p><h1 id="page-title" data-i18n="docs.title">Docs &amp; Download</h1></div>
       <p class="docs-lead" data-i18n="docs.lead">Run the real inspector on your own machine. The public website explains the workflow; it never receives configuration.</p>
@@ -40,6 +41,7 @@ go build -trimpath -o bin/hscope ./cmd/hscope
 ./bin/hscope serve . --port 0 --open</code></pre>
       </div>
     </section>
+    </div>
 
     <aside class="release-boundary" aria-labelledby="release-title">
       <p class="eyebrow technical" data-i18n="docs.releaseKicker">Release state</p>

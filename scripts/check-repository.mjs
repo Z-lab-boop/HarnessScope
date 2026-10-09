@@ -23,4 +23,5 @@ for (const file of files) {
   }
   if (bytes.includes("HARNESSSCOPE-CANARY")) assert.ok(allowed.test(file), `canary outside synthetic input/test/policy: ${file}`);
 }
+execFileSync(process.execPath, ["scripts/check-site-assets.mjs"], { stdio: "inherit" });
 console.log("Repository canary policy and five strict JSON schema parses PASS");

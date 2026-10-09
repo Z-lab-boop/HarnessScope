@@ -21,7 +21,9 @@
   </p>
 </div>
 
-![HarnessScope 配置观测站主视觉](docs/assets/harnessscope-hero.png)
+[官方网站](https://z-lab-boop.github.io/HarnessScope/) · [交互体验](https://z-lab-boop.github.io/HarnessScope/explore.html) · [文档与下载](https://z-lab-boop.github.io/HarnessScope/docs.html) · [GitHub Releases](https://github.com/Z-lab-boop/HarnessScope/releases)
+
+![HarnessScope Split Observatory 官网首页](docs/assets/site-hero.png)
 
 > **不是又一个“帮你改配置”的黑盒。** HarnessScope 更像一台配置 X 光机：先发现、再解释、最后只对明确安全的操作提供可回滚修复。
 
@@ -87,6 +89,17 @@ go build -trimpath -o bin/hscope ./cmd/hscope
 
 导出包包含报告、离线 HTML、清单和可选漂移结果；不包含原始配置、备份、会话令牌或明文凭据。
 </details>
+
+### 🌐 在线体验
+
+公开网站只使用虚构合成数据，不扫描、不上传、也不修改访问者的配置。
+
+<table>
+  <tr>
+    <td width="50%"><a href="https://z-lab-boop.github.io/HarnessScope/explore.html"><img src="docs/assets/site-explore.png" alt="HarnessScope 合成交互体验"></a><br><strong>Explore</strong><br>在浏览器中选择节点、筛选证据并预览虚构安全修复。</td>
+    <td width="50%"><a href="https://z-lab-boop.github.io/HarnessScope/docs.html"><img src="docs/assets/site-docs.png" alt="HarnessScope 文档与下载页面"></a><br><strong>Docs &amp; Download</strong><br>查看构建方式、兼容性证据和本地离线边界。</td>
+  </tr>
+</table>
 
 ## 🔬 它能发现什么
 
