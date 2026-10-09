@@ -1,29 +1,18 @@
-<div align="center">
-  <img src="docs/assets/harnessscope-logo.png" width="132" alt="HarnessScope Logo">
-  <h1>HarnessScope</h1>
-  <p><strong>给 AI 编码助手做一次配置体检</strong></p>
-  <p>一眼看清 Codex、Claude Code、Cursor 与 OpenCode 的配置来源、冲突、失效路径和重复上下文。</p>
+![HarnessScope public site: configuration evidence beside a synthetic dashboard and decorative concept photograph](docs/assets/site-hero.png)
 
-  <p>
-    <a href="https://github.com/Z-lab-boop/HarnessScope/actions/workflows/ci.yml"><img src="https://github.com/Z-lab-boop/HarnessScope/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-    <img src="https://img.shields.io/badge/Go-1.24%2B-00ADD8?logo=go&logoColor=white" alt="Go 1.24+">
-    <img src="https://img.shields.io/badge/License-Apache--2.0-7C3AED" alt="Apache-2.0">
-    <img src="https://img.shields.io/badge/运行方式-本地离线-10B981" alt="本地离线">
-    <img src="https://img.shields.io/badge/遥测-无-22D3EE" alt="无遥测">
-  </p>
+# HarnessScope
 
-  <p>
-    <a href="#-一分钟启动">一分钟启动</a> ·
-    <a href="#-真实界面">界面预览</a> ·
-    <a href="#-它能发现什么">能力清单</a> ·
-    <a href="README.zh-CN.md">完整中文说明</a> ·
-    <a href="#english-overview">English</a>
-  </p>
-</div>
+Local configuration forensics for coding agents.
 
-[官方网站](https://z-lab-boop.github.io/HarnessScope/) · [交互体验](https://z-lab-boop.github.io/HarnessScope/explore.html) · [文档与下载](https://z-lab-boop.github.io/HarnessScope/docs.html) · [GitHub Releases](https://github.com/Z-lab-boop/HarnessScope/releases)
+[Website](https://z-lab-boop.github.io/HarnessScope/) · [Explore](https://z-lab-boop.github.io/HarnessScope/explore.html) · [Docs](https://z-lab-boop.github.io/HarnessScope/docs.html) · [Releases](https://github.com/Z-lab-boop/HarnessScope/releases) · [中文](README.zh-CN.md) · [English overview](#english-overview)
 
-![HarnessScope Split Observatory 官网首页](docs/assets/site-hero.png)
+| Discover | Trace | Resolve |
+| --- | --- | --- |
+| Find configuration sources | Follow provenance and precedence evidence | Review conflicts and SAFE fixes |
+
+Codex and Claude Code have version-specific VERIFIED adapters; Cursor and OpenCode remain PREVIEW. Inspection stays local and offline, with no telemetry. Build from source; Releases is an informational link while the formal release gate remains open.
+
+The hero combines a Playwright synthetic dashboard capture with decorative generated concept photography. It contains no real user configuration. The technical guide below is in Chinese; see the [English overview](#english-overview) or [English website documentation](https://z-lab-boop.github.io/HarnessScope/docs.html).
 
 > **不是又一个“帮你改配置”的黑盒。** HarnessScope 更像一台配置 X 光机：先发现、再解释、最后只对明确安全的操作提供可回滚修复。
 
@@ -93,6 +82,8 @@ go build -trimpath -o bin/hscope ./cmd/hscope
 ### 🌐 在线体验
 
 公开网站只使用虚构合成数据，不扫描、不上传、也不修改访问者的配置。
+
+下列图片是公开网站的英文截图：Explore 展示仓库内置的虚构数据，Docs 展示源码构建说明；它们不是本地仪表盘的扫描结果。
 
 <table>
   <tr>

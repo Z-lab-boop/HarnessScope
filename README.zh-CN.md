@@ -1,12 +1,16 @@
-<div align="center">
-  <img src="docs/assets/harnessscope-logo.png" width="112" alt="HarnessScope Logo">
-  <h1>HarnessScope</h1>
-  <p><strong>完整中文技术说明</strong></p>
-</div>
+![HarnessScope 官网：首页说明、合成仪表盘与装饰性概念摄影](docs/assets/site-hero.png)
 
-[官方网站](https://z-lab-boop.github.io/HarnessScope/) · [交互体验](https://z-lab-boop.github.io/HarnessScope/explore.html) · [文档与下载](https://z-lab-boop.github.io/HarnessScope/docs.html) · [GitHub Releases](https://github.com/Z-lab-boop/HarnessScope/releases)
+# HarnessScope
 
-![HarnessScope Split Observatory 官网首页](docs/assets/site-hero.png)
+面向编码助手的本地配置取证工具。
+
+[官方网站](https://z-lab-boop.github.io/HarnessScope/) · [交互体验](https://z-lab-boop.github.io/HarnessScope/explore.html) · [文档与下载](https://z-lab-boop.github.io/HarnessScope/docs.html) · [GitHub Releases](https://github.com/Z-lab-boop/HarnessScope/releases) · [English overview](README.md#english-overview)
+
+| 发现 | 追溯 | 解决 |
+| --- | --- | --- |
+| 查找配置来源 | 沿来源与优先级证据追溯 | 审查冲突与 SAFE 修复 |
+
+首页图片将 Playwright 合成仪表盘截图与生成的装饰性概念摄影组合展示，不含真实用户配置。检查在本地离线进行，无遥测；正式发布门禁仍开放，请从源码构建，Releases 仅为信息入口。
 
 HarnessScope v0.2 是一个本地、离线的编码助手配置体检工具与浏览器仪表盘，用来回答三个问题：实际发现了哪些配置；某条规则、MCP、Hook 或 Skill 从哪里来；哪些冲突、失效路径和重复上下文值得处理。
 
@@ -66,6 +70,8 @@ Overview 展示证据等级与风险；Graph 展示来源关系与检查器；Fi
 ### 在线体验
 
 公开网站只使用虚构合成数据，不扫描、不上传、也不修改访问者的配置。
+
+下列图片是公开网站的英文截图：Explore 展示仓库内置的虚构数据，Docs 展示源码构建说明；它们不是本地仪表盘的扫描结果。
 
 | 交互体验 | 文档与下载 |
 |---|---|
