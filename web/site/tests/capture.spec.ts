@@ -7,6 +7,10 @@ import { fileURLToPath } from "node:url";
 
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
 
+test("capture server proves child ownership and rejects foreign listeners", () => {
+  execFileSync(process.execPath, ["--test", "site/capture-server.test.mjs"], { cwd: join(repository, "web"), stdio: "pipe", timeout: 15000 });
+});
+
 for (const [path, capture] of [["/", "hero"], ["/explore.html", "explore"], ["/docs.html", "docs"]] as const) {
   test(`${capture} capture surface is stable`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });

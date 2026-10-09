@@ -5,8 +5,10 @@ import { fileURLToPath } from "node:url";
 
 // Resolve the CLI path from this script, independently of Playwright's cwd.
 const root = await realpath(fileURLToPath(new URL(`${process.argv[2] ?? "../../dist/site"}/`, import.meta.url)));
+const port = Number(process.argv[3] ?? 4177);
+if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error("Invalid server port");
 const types = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".json": "application/json; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".ico": "image/x-icon" };
-createServer(async (request, response) => {
+const server = createServer(async (request, response) => {
   try {
     let path = decodeURIComponent((request.url ?? "/").split("?")[0]);
     if (path.includes("\\") || path.includes("\0") || path.split("/").includes("..")) {
@@ -30,4 +32,15 @@ createServer(async (request, response) => {
   } catch (error) {
     response.writeHead(error instanceof URIError ? 400 : 404).end("Unavailable");
   }
-}).listen(4177, "127.0.0.1");
+});
+server.once("error", error => {
+  console.error(`Static server failed to listen: ${error.message}`);
+  process.exitCode = 1;
+  if (process.connected) process.disconnect();
+});
+server.listen(port, "127.0.0.1", () => {
+  const address = server.address();
+  if (process.send && address && typeof address !== "string") {
+    process.send({ type: "listening", host: address.address, port: address.port, pid: process.pid });
+  }
+});
