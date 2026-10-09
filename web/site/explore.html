@@ -18,17 +18,64 @@
       <button class="language-switch" type="button" data-language-switch aria-label="切换到中文">中文</button>
     </nav>
   </header>
-  <main id="main" tabindex="-1" class="split">
-    <section class="editorial" aria-labelledby="page-title">
-      <p class="eyebrow technical">HarnessScope</p>
+  <main id="main" tabindex="-1" class="explore-page">
+    <section class="explore-intro" aria-labelledby="page-title">
+      <p class="eyebrow technical" data-i18n="explore.kicker">A small fictional workspace · an evidence trail</p>
       <h1 id="page-title" data-i18n="explore.title">Synthetic interactive walkthrough</h1>
       <p data-i18n="explore.body">Explore fictional configuration evidence. The public walkthrough performs no scan or upload.</p>
       <noscript><p data-i18n="explore.nojs">JavaScript is required for the interactive walkthrough. Navigation and documentation remain available.</p></noscript>
     </section>
-    <aside class="observatory">
-      <div class="orbit" aria-hidden="true"></div>
-      <p class="technical"><span data-i18n="field.label">Configuration observatory</span><br><span data-i18n="field.body">Discover / Trace / Resolve</span></p>
-    </aside>
+    <p class="explore-status technical" role="status" aria-live="polite" aria-atomic="true" data-explore-status data-i18n="explore.loading">Loading fictional evidence…</p>
+    <section class="explore-unavailable" data-explore-error hidden role="alert">
+      <h2 data-i18n="explore.unavailable">Walkthrough unavailable</h2>
+      <p data-i18n="explore.failure">The fictional dataset could not be validated. No evidence is displayed.</p>
+      <a href="https://github.com/Z-lab-boop/HarnessScope#synthetic-demo" data-i18n="explore.repository">Read the repository demo instructions ↗</a>
+    </section>
+    <div data-explore-workbench hidden>
+      <div class="explore-chapters technical" role="tablist" aria-label="Walkthrough chapters" data-i18n-aria="explore.chapters">
+        <button id="tab-discover" role="tab" aria-selected="true" aria-controls="chapter-discover" tabindex="0" type="button" data-chapter="discover" data-i18n="explore.discover">Discover</button>
+        <button id="tab-trace" role="tab" aria-selected="false" aria-controls="chapter-trace" tabindex="-1" type="button" data-chapter="trace" data-i18n="explore.trace">Trace</button>
+        <button id="tab-resolve" role="tab" aria-selected="false" aria-controls="chapter-resolve" tabindex="-1" type="button" data-chapter="resolve" data-i18n="explore.resolve">Resolve</button>
+      </div>
+      <section class="explore-chapter" id="chapter-discover" role="tabpanel" aria-labelledby="tab-discover" tabindex="0"><p data-i18n="explore.discoverBody">Start with nine fictional declarations. Select a node to inspect its source; filter the view to narrow the trail.</p></section>
+      <section class="explore-chapter" id="chapter-trace" role="tabpanel" aria-labelledby="tab-trace" tabindex="0" hidden><p data-i18n="explore.traceBody">Follow declared links into the inspector. Evidence describes this fictional dataset; it does not verify a client’s runtime behavior.</p></section>
+      <section class="explore-chapter" id="chapter-resolve" role="tabpanel" aria-labelledby="tab-resolve" tabindex="0" hidden><p data-i18n="explore.resolveBody">Compare two fictional MCP declarations, then inspect a safe-fix illustration. Every change shown here is a preview.</p></section>
+      <div class="explore-filters technical">
+        <label><span data-i18n="explore.clientFilter">Client</span><select data-client-filter><option value="all" data-i18n="explore.allClients">All clients</option><option value="codex">Codex</option><option value="claude">Claude Code</option><option value="cursor">Cursor</option><option value="opencode">OpenCode</option></select></label>
+        <label><span data-i18n="explore.evidenceFilter">Evidence</span><select data-evidence-filter><option value="all" data-i18n="explore.allEvidence">All evidence</option><option value="CONFIRMED" data-i18n="explore.confirmed">CONFIRMED</option><option value="LIKELY" data-i18n="explore.likely">LIKELY</option><option value="UNKNOWN" data-i18n="explore.unknown">UNKNOWN</option></select></label>
+        <button type="button" data-show-conflicts aria-expanded="false" aria-controls="conflict-evidence" data-i18n="explore.showConflicts">Show conflicts</button>
+        <button type="button" data-reset-explore data-i18n="explore.reset">Reset view</button>
+      </div>
+      <div class="explore-workspace">
+        <section class="explore-field" aria-label="Fictional evidence graph" data-i18n-aria="explore.graph">
+          <p class="eyebrow technical" data-i18n="explore.graphKicker">Declared relationships · synthetic data</p>
+          <svg class="explore-graph" viewBox="0 0 640 450" aria-label="Interactive fictional graph" data-i18n-aria="explore.svgLabel"></svg>
+          <p class="explore-legend technical" data-i18n="explore.legend">● Confirmed · ◇ Likely · □ Unknown | dashed line: duplicate declaration</p>
+          <h2 class="technical" data-i18n="explore.listTitle">Inspect the evidence</h2>
+          <ul class="explore-node-list" data-explore-nodes></ul>
+          <p data-explore-empty data-i18n="explore.empty" hidden>No declarations match these filters.</p>
+        </section>
+        <aside class="explore-inspector" aria-label="Evidence inspector" data-i18n-aria="explore.inspector">
+          <p class="eyebrow technical" data-i18n="explore.inspector">Evidence inspector</p>
+          <div data-explore-inspector></div>
+          <p class="explore-boundary technical" data-i18n="explore.boundary">All sources are fictional relative paths. This page reads its committed demo file only; it does not scan, upload, or modify configuration.</p>
+        </aside>
+      </div>
+      <section id="conflict-evidence" class="explore-conflict" aria-label="Conflict evidence" data-i18n-aria="explore.conflictRegion" hidden>
+        <p class="eyebrow technical" data-i18n="explore.comparisonKicker">Across clients · fictional comparison</p>
+        <h2 data-i18n="explore.conflictTitle">Fictional duplicate MCP declaration</h2>
+        <p data-i18n="explore.conflictBody">Both sources declare demo-tools. Structural similarity suggests duplication; actual merge behavior is unknown. This comparison always shows both declarations, independently of the graph filters.</p>
+        <div class="explore-comparison" data-explore-comparison></div>
+        <button type="button" data-preview-fix aria-expanded="false" aria-controls="fix-preview" data-i18n="explore.preview">Preview safe fix</button>
+        <section id="fix-preview" class="explore-preview" aria-label="Safe-fix preview" data-i18n-aria="explore.previewRegion" hidden>
+          <h3 data-i18n="explore.fixTitle">Remove the fictional duplicate declaration</h3>
+          <p class="technical" data-i18n="explore.previewOnly">Preview only · nothing was changed</p>
+          <p class="technical" data-i18n="explore.risk">SAFE · fictional plan</p>
+          <pre><code data-explore-patch></code></pre>
+          <button type="button" data-close-preview data-i18n="explore.close">Close preview</button>
+        </section>
+      </section>
+    </div>
   </main>
   <footer class="technical"><span data-i18n="footer">Local configuration. Traceable evidence.</span></footer>
   <script type="module" src="./assets/site.js"></script>
