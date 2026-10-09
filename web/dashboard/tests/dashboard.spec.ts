@@ -187,11 +187,12 @@ test("stale revision refresh failure stays recoverable without replaying the mut
 
 test("keyboard reaches the workbench and selection inspector with visible focus", async ({ page }) => {
   await page.goto(`${base}/#token=${token}`);
+  const client = page.getByRole("button", { name: "Inspect codex" });
+  await expect(client).toBeVisible();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: "Skip to workbench" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("main")).toBeFocused();
-  const client = page.getByRole("button", { name: "Inspect codex" });
   await page.keyboard.press("Tab");
   await expect(client).toBeFocused();
   expect(await client.evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe("none");
