@@ -12,6 +12,7 @@ export const english = {
   "docs.startTitle": "Build from source",
   "docs.startBody": "HarnessScope currently requires Go 1.24 or newer. Clone the repository, build one local binary, then open the authenticated loopback dashboard.",
   "docs.terminalLabel": "Terminal commands",
+  "docs.sourceLabel": "source",
   "docs.scanOnly": "Prefer the terminal? Run a scan without writing a report:",
   "docs.releaseKicker": "Release state",
   "docs.releaseTitle": "No tagged binary release is published yet.",
@@ -45,7 +46,7 @@ export const english = {
 
 export type ContentKey = keyof typeof english;
 
-const chinese = {
+const chinese: Record<ContentKey, string> = {
   ...copy["zh-CN"],
   ...homeCopy["zh-CN"],
   ...exploreCopy["zh-CN"],
@@ -55,6 +56,7 @@ const chinese = {
   "docs.startTitle": "从源码构建",
   "docs.startBody": "HarnessScope 当前需要 Go 1.24 或更高版本。克隆仓库、构建一个本地二进制，然后打开经过认证的回环地址仪表盘。",
   "docs.terminalLabel": "终端命令",
+  "docs.sourceLabel": "源码",
   "docs.scanOnly": "更喜欢终端？可直接扫描且不写入报告：",
   "docs.releaseKicker": "发布状态",
   "docs.releaseTitle": "目前尚未发布带标签的正式二进制版本。",
@@ -84,6 +86,6 @@ const chinese = {
   "docs.contributing": "贡献指南",
   "docs.englishReadme": "英文 README",
   "docs.chineseReadme": "完整中文说明",
-} satisfies Record<ContentKey, string>;
+};
 
 export const content: Record<Locale, Record<ContentKey, string>> = { en: english, "zh-CN": chinese };
