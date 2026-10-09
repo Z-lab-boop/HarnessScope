@@ -478,6 +478,9 @@ test("normalization and layout resist input order, attribute order and duplicate
   left.attributes = { a: { kind: "string", display: "1", present: true }, b: { kind: "secret", display: "LEFT_CANARY", present: true } };
   right.attributes = { b: { kind: "secret", display: "RIGHT_CANARY", present: true }, a: { kind: "string", display: "1", present: true } };
   expect(normalize(nodes, "codex", "opencode").find((row) => row.name === "same service")?.status).toBe("Present");
+  left.attributes = { path: { kind: "string", display: "/home/alice/tool", present: true } };
+  right.attributes = { path: { kind: "string", display: "/home/bob/tool", present: true } };
+  expect(normalize(nodes, "codex", "opencode").find((row) => row.name === "same service")?.status).toBe("Present");
   nodes.push({ ...left, id: "same-duplicate", attributes: {} });
   expect(normalize(nodes, "codex", "opencode").find((row) => row.name === "same service")?.status).toBe("Divergent");
   nodes.push({ ...left, id: "other-type", type: "HOOK" });

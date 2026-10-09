@@ -166,11 +166,26 @@ func TestCompareDetectsSafeValueAndLoadConditionWithoutLeakingEither(t *testing.
 			t.Fatalf("drift leaked %q: %s", private, encoded)
 		}
 	}
-	// Secret payload changes alone remain invisible; presence/category changes do not.
-	baseline = current
-	current.Analysis.Graph.Nodes[0].Attributes["token"] = model.SafeValue{Kind: "secret", Display: "another-secret", SecretCategory: "credential", Present: true}
-	if got := Compare(current, baseline); len(got.Changes) != 0 {
+	// Build independent values: a shallow assignment would alias the attribute
+	// map and make this assertion pass even if secret payloads were fingerprinted.
+	secretBaseline, secretCurrent := driftFixture(), driftFixture()
+	secretBaseline.Analysis.Graph.Nodes[0].Attributes = map[string]model.SafeValue{
+		"token": {Kind: "secret", Display: "secret-before-independent", SecretCategory: "credential", Present: true},
+	}
+	secretCurrent.Analysis.Graph.Nodes[0].Attributes = map[string]model.SafeValue{
+		"token": {Kind: "secret", Display: "secret-after-independent", SecretCategory: "credential", Present: true},
+	}
+	if got := Compare(secretCurrent, secretBaseline); len(got.Changes) != 0 {
 		t.Fatalf("secret payload affected fingerprint: %+v", got)
+	}
+	secretCurrent.Analysis.Graph.Nodes[0].Attributes["token"] = model.SafeValue{Kind: "secret", Display: "secret-after-independent", SecretCategory: "credential", Present: false}
+	got = Compare(secretCurrent, secretBaseline)
+	if len(got.Changes) != 1 || got.Changes[0].EntityType != EntityNode {
+		t.Fatalf("secret presence change was missed: %+v", got)
+	}
+	encoded, _ = json.Marshal(got)
+	if bytes.Contains(encoded, []byte("secret-before-independent")) || bytes.Contains(encoded, []byte("secret-after-independent")) {
+		t.Fatalf("secret-only drift leaked payload: %s", encoded)
 	}
 }
 

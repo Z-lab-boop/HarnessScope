@@ -489,30 +489,37 @@ func TestServiceRejectsUnnamedUnknownAndDuplicateFixIDs(t *testing.T) {
 	}
 }
 
-func TestServicePlanRefreshesAndSanitizesWithoutPublishing(t *testing.T) {
+func TestServicePlanRejectsChangedTargetsWithoutReplacingRevisionAuthority(t *testing.T) {
 	s, paths, _ := serviceFixture(t, 1, nil)
 	before := s.State()
 	if err := os.WriteFile(paths[0], []byte("new\nnew\n"), 0o640); err != nil {
 		t.Fatal(err)
 	}
-	plans, err := s.PlanFixes(context.Background(), 1, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(plans) != 1 || plans[0].Edits[0].ExpectedHash == before.FixPlans[0].Edits[0].ExpectedHash || plans[0].Edits[0].TargetPath != "./a.md" {
-		t.Fatalf("plans: %+v", plans)
+	if _, err := s.PlanFixes(context.Background(), 1, nil); !errors.Is(err, fixes.ErrTargetChanged) {
+		t.Fatalf("changed target replaced same-revision authority: %v", err)
 	}
 	if !reflect.DeepEqual(before, s.State()) {
 		t.Fatal("planning published state")
+	}
+	rescanned, err := s.Rescan(context.Background(), 1)
+	if err != nil || rescanned.Revision != 2 || len(rescanned.FixPlans) != 1 || rescanned.FixPlans[0].Edits[0].ExpectedHash == before.FixPlans[0].Edits[0].ExpectedHash {
+		t.Fatalf("rescan did not establish fresh authority: %+v err=%v", rescanned, err)
 	}
 }
 
 func TestServiceApplyRequiresExactReviewedPlanBytes(t *testing.T) {
 	s, paths, _ := serviceFixture(t, 1, nil)
-	id := s.State().FixPlans[0].ID
+	original, err := s.PlanFixes(context.Background(), 1, nil)
+	if err != nil || len(original) != 1 {
+		t.Fatalf("initial preview=%+v err=%v", original, err)
+	}
+	id := original[0].ID
 	changed := []byte("swap\nswap\n")
 	if err := os.WriteFile(paths[0], changed, 0o640); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := s.PlanFixes(context.Background(), 1, nil); !errors.Is(err, fixes.ErrTargetChanged) {
+		t.Fatalf("second tab replaced same-ID authorization: %v", err)
 	}
 	if _, err := s.ApplyFixes(context.Background(), 1, []string{id}); !errors.Is(err, fixes.ErrTargetChanged) {
 		t.Fatalf("same-ID regenerated plan was accepted: %v", err)
@@ -520,35 +527,19 @@ func TestServiceApplyRequiresExactReviewedPlanBytes(t *testing.T) {
 	if data, _ := os.ReadFile(paths[0]); !bytes.Equal(data, changed) || s.State().Revision != 1 {
 		t.Fatal("conflicted apply changed target or revision")
 	}
-	plans, err := s.PlanFixes(context.Background(), 1, nil)
-	if err != nil || len(plans) != 1 || plans[0].ID != id {
-		t.Fatalf("fresh preview=%+v err=%v", plans, err)
+	rescanned, err := s.Rescan(context.Background(), 1)
+	if err != nil || rescanned.Revision != 2 || len(rescanned.FixPlans) != 1 || rescanned.FixPlans[0].ID != id {
+		t.Fatalf("fresh revision=%+v err=%v", rescanned, err)
 	}
-	applied, err := s.ApplyFixes(context.Background(), 1, []string{id})
+	if _, err := s.ApplyFixes(context.Background(), 1, []string{id}); !errors.Is(err, ErrStaleRevision) {
+		t.Fatalf("old tab was not rejected after rescan: %v", err)
+	}
+	applied, err := s.ApplyFixes(context.Background(), 2, []string{id})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if data, _ := os.ReadFile(paths[0]); string(data) != "swap\n" || applied.Revision != 2 {
+	if data, _ := os.ReadFile(paths[0]); string(data) != "swap\n" || applied.Revision != 3 {
 		t.Fatalf("fresh reviewed plan was not applied: state=%+v data=%q", applied, data)
-	}
-}
-
-func TestServiceApplyAcceptsFreshPreviewIDAtSameRevision(t *testing.T) {
-	s, paths, _ := serviceFixture(t, 1, nil)
-	oldID := s.State().FixPlans[0].ID
-	if err := os.WriteFile(paths[0], []byte("longer\nlonger\n"), 0o640); err != nil {
-		t.Fatal(err)
-	}
-	plans, err := s.PlanFixes(context.Background(), 1, nil)
-	if err != nil || len(plans) != 1 || plans[0].ID == oldID {
-		t.Fatalf("expected a fresh exact preview ID: %+v err=%v", plans, err)
-	}
-	applied, err := s.ApplyFixes(context.Background(), 1, []string{plans[0].ID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if data, _ := os.ReadFile(paths[0]); string(data) != "longer\n" || applied.Revision != 2 {
-		t.Fatalf("fresh preview was not authoritative: state=%+v data=%q", applied, data)
 	}
 }
 
@@ -557,9 +548,9 @@ func TestServiceCompareClientsUsesCompleteDeclarationSets(t *testing.T) {
 	raw := model.ScanResult{Analysis: model.Analysis{
 		Clients: []model.ClientResult{{ID: "left"}, {ID: "right"}},
 		Graph: model.Graph{Nodes: []model.ConfigNode{
-			{ID: "left-user", Type: model.NodeRule, Client: "left", DisplayName: "setting.model", Attributes: map[string]model.SafeValue{"value": {Kind: "string", Display: "same", Present: true}}},
+			{ID: "left-user", Type: model.NodeRule, Client: "left", DisplayName: "setting.model", Attributes: map[string]model.SafeValue{"value": {Kind: "string", Display: "/home/alice/tool", Present: true}}},
 			{ID: "left-project", Type: model.NodeRule, Client: "left", DisplayName: "setting.model", Attributes: map[string]model.SafeValue{"value": {Kind: "string", Display: "project", Present: true}}},
-			{ID: "right-user", Type: model.NodeRule, Client: "right", DisplayName: "setting.model", Attributes: map[string]model.SafeValue{"value": {Kind: "string", Display: "same", Present: true}}},
+			{ID: "right-user", Type: model.NodeRule, Client: "right", DisplayName: "setting.model", Attributes: map[string]model.SafeValue{"value": {Kind: "string", Display: "/home/bob/tool", Present: true}}},
 		}},
 	}}
 	s, err := NewService(ServiceConfig{Workspace: root, HomeDir: filepath.Dir(root), AppDataDir: filepath.Join(root, "data"), Scan: func(context.Context) (model.ScanResult, error) { return raw, nil }})
@@ -572,6 +563,10 @@ func TestServiceCompareClientsUsesCompleteDeclarationSets(t *testing.T) {
 	}
 	if len(comparison.Rows) != 1 || comparison.Rows[0].Status != "Divergent" || len(comparison.Rows[0].Left) != 2 || len(comparison.Rows[0].Right) != 1 {
 		t.Fatalf("declarations were collapsed: %+v", comparison)
+	}
+	encoded, _ := json.Marshal(comparison)
+	if bytes.Contains(encoded, []byte("/home/alice")) || bytes.Contains(encoded, []byte("/home/bob")) || !bytes.Contains(encoded, []byte("[REDACTED PATH]")) {
+		t.Fatalf("comparison path normalization diverged or leaked: %s", encoded)
 	}
 	raw.Analysis.Graph.Nodes = append(raw.Analysis.Graph.Nodes, model.ConfigNode{ID: "right-project", Type: model.NodeRule, Client: "right", DisplayName: "setting.model", Attributes: map[string]model.SafeValue{"value": {Kind: "string", Display: "project", Present: true}}})
 	if _, err := s.Rescan(context.Background(), 1); err != nil {

@@ -663,3 +663,27 @@ func TestRoutesConcurrentFixTargetChangeReturnsConflict(t *testing.T) {
 		t.Fatal("conflict failed to preserve rollback or concurrent edit")
 	}
 }
+
+func TestRoutesSecondSameIDPreviewCannotReplaceOldTabAuthorization(t *testing.T) {
+	s, paths, _ := serviceFixture(t, 1, nil)
+	session := fixedSession(t)
+	handler := NewHandler(s, session)
+	var plans []model.FixPlan
+	routeJSON(t, routeRequest(t, handler, session, "POST", "/api/v1/fixes/plan", `{"revision":1}`, nil), 200, &plans)
+	if len(plans) != 1 {
+		t.Fatalf("initial preview=%+v", plans)
+	}
+	if err := os.WriteFile(paths[0], []byte("swap\nswap\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	var apiErr APIError
+	routeJSON(t, routeRequest(t, handler, session, "POST", "/api/v1/fixes/plan", `{"revision":1}`, nil), 409, &apiErr)
+	if apiErr.Code != "target_changed" {
+		t.Fatalf("second preview error=%+v", apiErr)
+	}
+	body := fmt.Sprintf(`{"revision":1,"fix_ids":[%q]}`, plans[0].ID)
+	routeJSON(t, routeRequest(t, handler, session, "POST", "/api/v1/fixes/apply", body, nil), 409, &apiErr)
+	if apiErr.Code != "target_changed" || s.State().Revision != 1 {
+		t.Fatalf("old tab inherited new preview authority: error=%+v revision=%d", apiErr, s.State().Revision)
+	}
+}

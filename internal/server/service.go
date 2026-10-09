@@ -89,8 +89,9 @@ func (s *Service) Rescan(ctx context.Context, expectedRevision uint64) (Dashboar
 	return s.State(), nil
 }
 
-// PlanFixes refreshes plans without publishing a new scan revision. An empty
-// selection previews all plans; ApplyFixes always requires explicit IDs.
+// PlanFixes revalidates the immutable plans already authorized by this scan
+// revision. Changed edits require Rescan; an empty selection previews all
+// plans, while ApplyFixes always requires explicit IDs.
 func (s *Service) PlanFixes(ctx context.Context, expectedRevision uint64, ids []string) ([]model.FixPlan, error) {
 	s.opMu.Lock()
 	defer s.opMu.Unlock()
@@ -108,6 +109,15 @@ func (s *Service) PlanFixes(ctx context.Context, expectedRevision uint64, ids []
 	if err != nil {
 		return nil, err
 	}
+	s.mu.RLock()
+	reviewed := append([]model.FixPlan(nil), s.raw.Analysis.FixPlans...)
+	s.mu.RUnlock()
+	if !sameReviewedPlans(reviewed, plans, ids) {
+		// A revision authorizes one immutable set of exact edits. A second tab
+		// may inspect it, but filesystem changes require Rescan so an older tab
+		// cannot inherit replacement hashes through a same-ID preview.
+		return nil, fixes.ErrTargetChanged
+	}
 	raw.Analysis.FixPlans = plans
 	public, err := sanitize.Report(raw, s.config.HomeDir, s.config.Workspace)
 	if err != nil {
@@ -116,17 +126,28 @@ func (s *Service) PlanFixes(ctx context.Context, expectedRevision uint64, ids []
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	// The preview is also the authority for a later apply at this revision.
-	// Keep the unsanitized edits private; ApplyFixes must never substitute a
-	// newly generated same-ID plan for the bytes the user reviewed here.
-	s.mu.Lock()
-	s.raw.Analysis.FixPlans = plans
-	s.mu.Unlock()
 	if public.Analysis.FixPlans == nil {
 		return []model.FixPlan{}, nil
 	}
 	redactPublicPlans(public.Analysis.FixPlans)
 	return public.Analysis.FixPlans, nil
+}
+
+func sameReviewedPlans(reviewed, refreshed []model.FixPlan, ids []string) bool {
+	expected := reviewed
+	if len(ids) > 0 {
+		wanted := make(map[string]bool, len(ids))
+		for _, id := range ids {
+			wanted[id] = true
+		}
+		expected = make([]model.FixPlan, 0, len(ids))
+		for _, plan := range reviewed {
+			if wanted[plan.ID] {
+				expected = append(expected, plan)
+			}
+		}
+	}
+	return reflect.DeepEqual(expected, refreshed)
 }
 
 // ApplyFixes verifies every selected transaction before a single publication.
@@ -442,9 +463,10 @@ func (s *Service) CompareClients(left, right string) (ComparisonResponse, error)
 		}
 		key := string(node.Type) + "\x00" + node.DisplayName
 		if rows[key] == nil {
-			rows[key] = &ComparisonRow{Name: node.DisplayName, Type: node.Type}
+			rows[key] = &ComparisonRow{Name: comparisonSafeText(node.DisplayName), Type: node.Type}
 		}
 		row := rows[key]
+		node = comparisonPublicNode(node)
 		if node.Client == left {
 			row.Left = append(row.Left, node)
 		}
@@ -501,15 +523,45 @@ func comparisonAttributeSignature(node model.ConfigNode) string {
 	fields := make([]field, 0, len(keys))
 	for _, key := range keys {
 		value := node.Attributes[key]
-		display := value.Display
-		kind := strings.ToLower(value.Kind)
-		if value.SecretCategory != "" || strings.Contains(kind, "secret") || strings.Contains(kind, "credential") || strings.Contains(kind, "redact") {
-			display = "[REDACTED]"
-		}
+		display := comparisonSafeValue(value)
 		fields = append(fields, field{key, value.Kind, value.SecretCategory, display, value.Present})
 	}
 	data, _ := json.Marshal(fields)
 	return string(data)
+}
+
+var comparisonHomePath = regexp.MustCompile(`/(Users|home)/[^\s<>"']+`)
+
+func comparisonSafeText(value string) string {
+	return comparisonHomePath.ReplaceAllString(value, "[REDACTED PATH]")
+}
+
+func comparisonSafeValue(value model.SafeValue) string {
+	kind := strings.ToLower(value.Kind)
+	if value.SecretCategory != "" || strings.Contains(kind, "secret") || strings.Contains(kind, "credential") || strings.Contains(kind, "redact") {
+		return "[REDACTED]"
+	}
+	return comparisonSafeText(value.Display)
+}
+
+func comparisonPublicNode(node model.ConfigNode) model.ConfigNode {
+	node.DisplayName = comparisonSafeText(node.DisplayName)
+	node.LoadCondition = comparisonSafeText(node.LoadCondition)
+	if node.Attributes != nil {
+		attributes := make(map[string]model.SafeValue, len(node.Attributes))
+		for key, value := range node.Attributes {
+			value.Display = comparisonSafeValue(value)
+			attributes[key] = value
+		}
+		node.Attributes = attributes
+	}
+	node.Origins = append([]model.Origin(nil), node.Origins...)
+	for i := range node.Origins {
+		node.Origins[i].LogicalPath = comparisonSafeText(node.Origins[i].LogicalPath)
+		node.Origins[i].FieldPath = comparisonSafeText(node.Origins[i].FieldPath)
+		node.Origins[i].Rule = comparisonSafeText(node.Origins[i].Rule)
+	}
+	return node
 }
 
 // ListSnapshots never returns store-internal filesystem capabilities.
