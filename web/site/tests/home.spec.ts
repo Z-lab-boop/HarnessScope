@@ -47,6 +47,24 @@ test("home orbit supports keyboard navigation without hiding the story", async (
   for (const id of ["discover", "trace", "resolve"]) await expect(page.locator(`#${id}`)).toBeVisible();
 });
 
+for (const width of [360, 1440]) test(`home keeps clicked orbit chapters active after observer delivery at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  for (const name of ["Trace", "Resolve"]) {
+    await page.getByRole("button", { name, exact: true }).click();
+    // Immediate click assertions can pass before IntersectionObserver updates.
+    await page.waitForTimeout(250);
+    const id = name.toLowerCase();
+    await expect(page).toHaveURL(new RegExp(`#${id}$`));
+    await expect(page.locator(`#${id}`)).toBeFocused();
+    await expect(page.getByRole("button", { name, exact: true })).toHaveAttribute("aria-current", "step");
+    await expect(page.locator(`#${id}`)).toHaveClass(/is-current/);
+    await expect(page.locator("[data-orbit-target][aria-current]")).toHaveCount(1);
+    await expect(page.locator("[data-story-section].is-current")).toHaveCount(1);
+  }
+});
+
 test("home removes nonessential animation under reduced motion", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");

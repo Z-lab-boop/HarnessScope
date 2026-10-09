@@ -38,7 +38,9 @@ export function initHome(): void {
   const orbit = document.querySelector<HTMLElement>("[data-home-orbit]");
   const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-orbit-target]"));
   const sections = Array.from(document.querySelectorAll<HTMLElement>("[data-story-section]"));
+  let selectedId = sections.find(section => section.classList.contains("is-current"))?.id;
   const select = (id: string) => {
+    selectedId = id;
     buttons.forEach(button => {
       if (button.dataset.orbitTarget === id) button.setAttribute("aria-current", "step");
       else button.removeAttribute("aria-current");
@@ -61,8 +63,9 @@ export function initHome(): void {
       if (entry.isIntersecting) visible.set(entry.target.id, entry.intersectionRatio);
       else visible.delete(entry.target.id);
     });
-    const current = [...visible.entries()].sort((a, b) => b[1] - a[1])[0];
-    if (current) select(current[0]);
+    const best = [...visible.entries()].sort((a, b) => b[1] - a[1])[0];
+    // Retain an explicit choice when multiple chapters are equally visible.
+    if (best && (!selectedId || (visible.get(selectedId) ?? -1) < best[1])) select(best[0]);
   }, { threshold: [0, .25, .5, .75, 1] });
   sections.forEach(section => observer.observe(section));
 }
