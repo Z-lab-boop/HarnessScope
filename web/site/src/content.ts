@@ -40,7 +40,7 @@ export const english = {
   "docs.architecture": "Architecture",
   "docs.security": "Security policy",
   "docs.contributing": "Contributing",
-  "docs.englishReadme": "English README",
+  "docs.englishReadme": "English overview",
   "docs.chineseReadme": "中文说明",
 } as const;
 
@@ -84,7 +84,7 @@ const chinese: Record<ContentKey, string> = {
   "docs.architecture": "架构文档",
   "docs.security": "安全策略",
   "docs.contributing": "贡献指南",
-  "docs.englishReadme": "英文 README",
+  "docs.englishReadme": "英文概览",
   "docs.chineseReadme": "完整中文说明",
 };
 

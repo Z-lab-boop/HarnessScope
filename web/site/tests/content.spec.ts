@@ -45,7 +45,7 @@ test("Docs states the truthful release boundary", async ({ page }) => {
   await expect(page.getByText("No tagged binary release is published yet.", { exact: true })).toBeVisible();
   await expect(page.locator(".terminal-panel code")).toContainText("go build -trimpath -o bin/hscope ./cmd/hscope");
   await expect(page.locator(".terminal-panel code")).toContainText("./bin/hscope serve . --port 0 --open");
-  for (const [key, path] of [["docs.architecture", "docs/architecture.md"], ["docs.security", "SECURITY.md"], ["docs.contributing", "CONTRIBUTING.md"], ["docs.englishReadme", "README.md"], ["docs.chineseReadme", "README.zh-CN.md"]] as const) {
+  for (const [key, path] of [["docs.architecture", "docs/architecture.md"], ["docs.security", "SECURITY.md"], ["docs.contributing", "CONTRIBUTING.md"], ["docs.englishReadme", "README.md#english-overview"], ["docs.chineseReadme", "README.zh-CN.md"]] as const) {
     await expect(page.getByRole("link", { name: content.en[key], exact: true })).toHaveAttribute("href", `https://github.com/Z-lab-boop/HarnessScope/blob/main/${path}`);
   }
   await expect(page.locator(".client-matrix")).toContainText("0.162.0-alpha.2");
@@ -94,6 +94,7 @@ test("JavaScript fallback Docs retains commands, navigation and privacy", async 
   await expect(page.getByText(content.en["docs.localBody"], { exact: true })).toBeVisible();
   await expect(page.getByText(content.en["docs.privacyBody"], { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "GitHub Releases" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "English overview", exact: true })).toHaveAttribute("href", "https://github.com/Z-lab-boop/HarnessScope/blob/main/README.md#english-overview");
 });
 
 test.describe("Explore JavaScript fallback", () => {
