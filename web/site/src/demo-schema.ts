@@ -13,8 +13,8 @@ function record(value: unknown, keys: string[]): Record<string, unknown> {
 function text(value: unknown): string {
   if (typeof value !== "string" || !value.trim() || value.length > 300 || /[\u0000-\u0008\u000b-\u001f\u007f]/.test(value)) invalid();
   // Validate every displayable string, including patch lines and finding titles.
-  if (/(?:^|[\s"'=(:])(?:\/|[a-z]:[\\/]|~(?:[\\/]|$)|\\\\)/i.test(value)
-    || /(?:[a-z][a-z\d+.-]*:\/\/|www\.|[\w.+-]+@[\w.-]+\.[a-z]{2,})/i.test(value)
+  if (/(?:^|[^a-z\d_.-])(?:\/|[a-z]:[\\/]|~(?:[^\s]*[\\/]|$)|\\)/i.test(value)
+    || /(?:[a-z][a-z\d+.-]*:\/\/|\b(?:https?|ftp|file|data|mailto|javascript|ssh):|www\.|[\w.+-]+@[\w.-]+\.[a-z]{2,})/i.test(value)
     || /(?:sk-|gh[pousr]_|github_pat_|AKIA[A-Z\d]{12}|ASIA[A-Z\d]{12}|xox[baprs]-|-----BEGIN .*PRIVATE KEY|\bBearer\s+\S+|\beyJ[\w-]+\.[\w-]+\.[\w-]+|\b(?:session[_-]?token|api[_-]?key|access[_-]?token|password|secret)\s*[:=]\s*\S+)/i.test(value)) invalid();
   return value;
 }

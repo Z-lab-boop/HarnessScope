@@ -190,6 +190,9 @@ export async function initExplore(): Promise<void> {
   function renderComparison(): void {
     const comparison = document.querySelector<HTMLElement>("[data-explore-comparison]")!;
     comparison.replaceChildren();
+    const translatedTitle = (value: string, key: Key) => value === exploreCopy.en[key] ? t(key) : value;
+    document.querySelector<HTMLElement>('[data-i18n="explore.conflictTitle"]')!.textContent = translatedTitle(demo.conflict.title, "explore.conflictTitle");
+    document.querySelector<HTMLElement>('[data-i18n="explore.fixTitle"]')!.textContent = translatedTitle(demo.fix_preview.title, "explore.fixTitle");
     demo.conflict.node_ids.forEach(id => {
       const node = byId.get(id)!;
       const entry = element("div");

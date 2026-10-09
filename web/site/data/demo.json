@@ -23,6 +23,6 @@
   "fix_preview": {
     "title": "Remove the fictional duplicate declaration",
     "risk": "SAFE",
-    "patch": ["--- ./.claude/settings.json", "+++ ./.claude/settings.json (preview)", "- demo-tools: duplicate declaration", "+ demo-tools: single retained declaration"]
+    "patch": ["--- ./.claude/settings.json", "+++ ./.claude/settings.json (preview)", "- demo-tools: duplicate declaration"]
   }
 }
