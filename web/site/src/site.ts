@@ -1,13 +1,12 @@
-import { copy, type CopyKey, type Locale } from "./i18n.js";
-import { homeCopy, initHome } from "./home.js";
-import { exploreCopy, initExplore } from "./explore.js";
+import { content, type ContentKey } from "./content.js";
+import { copy, type Locale } from "./i18n.js";
+import { initHome } from "./home.js";
+import { initExplore } from "./explore.js";
 
 const storageKey = "harnessscope.locale";
 
 function translate(key: string | undefined, locale: Locale, fallback: string): string {
-  if (key && Object.prototype.hasOwnProperty.call(copy.en, key)) return copy[locale][key as CopyKey];
-  if (key && Object.prototype.hasOwnProperty.call(homeCopy.en, key)) return homeCopy[locale][key as keyof typeof homeCopy.en];
-  if (key && Object.prototype.hasOwnProperty.call(exploreCopy.en, key)) return exploreCopy[locale][key as keyof typeof exploreCopy.en];
+  if (key && Object.prototype.hasOwnProperty.call(content.en, key)) return content[locale][key as ContentKey];
   if (process.env.NODE_ENV !== "production") throw new Error(`Unknown translation key: ${key}`);
   return fallback;
 }
