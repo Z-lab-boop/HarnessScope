@@ -2,6 +2,7 @@ package claude
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -26,6 +27,15 @@ func TestVerifiedFixtureResolvesLocalSettingsAndImports(t *testing.T) {
 	}
 
 	cwd := filepath.Join(fixture, "workspace")
+	gitMarker := filepath.Join(cwd, ".git")
+	if _, err := os.Stat(gitMarker); os.IsNotExist(err) {
+		if err := os.Mkdir(gitMarker, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Remove(gitMarker) })
+	} else if err != nil {
+		t.Fatal(err)
+	}
 	sources := adapter.DiscoverSources(ctx, cwd)
 	parsed := make([]model.ParsedConfig, 0, len(sources))
 	for _, source := range sources {
