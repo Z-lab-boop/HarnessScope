@@ -162,7 +162,7 @@ for (const failure of ["network", "status", "json", "schema"]) test(`Explore han
   await page.route("**/data/demo.json", route => failure === "network" ? route.abort() : route.fulfill({ status: failure === "status" ? 503 : 200, contentType: "application/json", body: failure === "json" ? "{" : JSON.stringify({ ...fixture(), nodes: [...fixture().nodes, fixture().nodes[0]] }) }));
   await page.goto("/explore.html");
   await expect(page.getByRole("heading", { name: "Walkthrough unavailable" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Read the repository demo instructions ↗" })).toHaveAttribute("href", "https://github.com/Z-lab-boop/HarnessScope#local-control-center");
+  await expect(page.getByRole("link", { name: "Read the repository demo instructions ↗" })).toHaveAttribute("href", "https://github.com/Z-lab-boop/HarnessScope/blob/main/demo/conflicted-workspace/EXPECTED.md");
   await expect(page.locator("[data-node-id]")).toHaveCount(0);
   await expect(page.locator("[data-explore-workbench]")).toBeHidden();
   await page.getByRole("button", { name: "切换到中文" }).click();
