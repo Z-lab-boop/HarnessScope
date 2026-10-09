@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +30,8 @@ jobs:
       - run: npx --prefix web playwright install --with-deps chromium
       - run: npm --prefix web run test:site
       - run: node scripts/check-site-assets.mjs
+      - name: Rebuild clean publication output after test fixtures
+        run: npm --prefix web run build:site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

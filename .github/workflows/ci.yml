@@ -57,6 +57,7 @@ jobs:
       - run: npm --prefix web run test:visual
       - run: npm --prefix web run test:dashboard
       - run: npm --prefix web run test:site
+      - run: node scripts/check-site-assets.mjs
       - name: Four-target archives, checksums and native fresh-extract smoke
         run: |
           output=$(mktemp -d)
