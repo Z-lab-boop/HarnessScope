@@ -2,6 +2,7 @@ package codex
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,6 +11,24 @@ import (
 	"github.com/Z-lab-boop/harnessscope/internal/model"
 	"github.com/Z-lab-boop/harnessscope/internal/secrets"
 )
+
+func TestProjectRootRecognizesGitWorktreeFile(t *testing.T) {
+	root := t.TempDir()
+	nested := filepath.Join(root, "project", "nested")
+	if err := os.MkdirAll(nested, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".git"), []byte("gitdir: /tmp/example\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ancestors, err := discovery.WalkAncestors(nested)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := projectRoot(ancestors); got != root {
+		t.Fatalf("project root=%q, want worktree root %q", got, root)
+	}
+}
 
 func TestVerifiedFixtureResolvesProjectConfigurationAndInstructionChain(t *testing.T) {
 	fixture := fixturePath(t, "basic")

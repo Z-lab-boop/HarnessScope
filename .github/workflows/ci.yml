@@ -35,6 +35,7 @@ jobs:
       - run: npm --prefix web run build
       - run: git diff --exit-code -- internal/report/assets internal/server/assets
       - run: npx --prefix web tsc --noEmit -p web/tsconfig.json
+      - run: npm --prefix web run build:site
       - run: node scripts/check-repository.mjs
       - run: for script in scripts/*.sh demo/*.sh; do sh -n "$script"; done
       - run: go test ./...
@@ -55,6 +56,8 @@ jobs:
         run: npx playwright install chromium
       - run: npm --prefix web run test:visual
       - run: npm --prefix web run test:dashboard
+      - run: npm --prefix web run test:site
+      - run: node scripts/check-site-assets.mjs
       - name: Four-target archives, checksums and native fresh-extract smoke
         run: |
           output=$(mktemp -d)

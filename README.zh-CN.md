@@ -1,4 +1,16 @@
+![HarnessScope 官网：首页说明、合成仪表盘与装饰性概念摄影](docs/assets/site-hero.png)
+
 # HarnessScope
+
+面向编码助手的本地配置取证工具。
+
+[官方网站](https://z-lab-boop.github.io/HarnessScope/) · [交互体验](https://z-lab-boop.github.io/HarnessScope/explore.html) · [文档与下载](https://z-lab-boop.github.io/HarnessScope/docs.html) · [GitHub Releases](https://github.com/Z-lab-boop/HarnessScope/releases) · [English overview](README.md#english-overview)
+
+| 发现 | 追溯 | 解决 |
+| --- | --- | --- |
+| 查找配置来源 | 沿来源与优先级证据追溯 | 审查冲突与 SAFE 修复 |
+
+首页图片将 Playwright 合成仪表盘截图与生成的装饰性概念摄影组合展示，不含真实用户配置。检查在本地离线进行，无遥测；正式发布门禁仍开放，请从源码构建，Releases 仅为信息入口。
 
 HarnessScope v0.2 是一个本地、离线的编码助手配置体检工具与浏览器仪表盘，用来回答三个问题：实际发现了哪些配置；某条规则、MCP、Hook 或 Skill 从哪里来；哪些冲突、失效路径和重复上下文值得处理。
 
@@ -6,20 +18,16 @@ HarnessScope v0.2 是一个本地、离线的编码助手配置体检工具与�
 
 ## 五分钟上手
 
-从 GitHub Releases 下载与你的系统和架构匹配的压缩包，并先用同一发布页的 `SHA256SUMS` 校验：
+当前尚未发布带标签的正式二进制版本。请使用 Go 1.24 或更高版本从源码构建：
 
 ```sh
-shasum -a 256 -c SHA256SUMS
-tar -xzf harnessscope_v0.2.0_darwin_arm64.tar.gz
-./hscope serve . --port 0 --open
-```
-
-Linux 可使用 `sha256sum -c SHA256SUMS`。发布包覆盖 darwin/linux × amd64/arm64，包含二进制、双语说明、安全说明、文档与许可证。生成本地候选包不代表已正式发布。在首个正式标签发布前，也可用 Go 1.24 或更高版本从源码构建：
-
-```sh
+git clone https://github.com/Z-lab-boop/HarnessScope.git
+cd HarnessScope
 go build -trimpath -o bin/hscope ./cmd/hscope
 ./bin/hscope serve . --port 0 --open
 ```
+
+GitHub Releases 当前仅作为信息入口。源码和测试已经公开；四平台候选归档已在本地验证，但真实 Linux 视觉基线仍需人工审阅；生成本地候选包不代表已正式发布。
 
 默认情况下，JSON 与单文件离线 HTML 报告写入系统应用数据目录，不污染被扫描的仓库。只想看终端结果时可加 `--no-report`。
 
@@ -59,6 +67,16 @@ Overview 展示证据等级与风险；Graph 展示来源关系与检查器；Fi
 
 该图来自已提交的 Playwright 合成夹具，是经目检的 macOS Chromium 示意截图，不是真实用户配置，也不是 Linux 视觉回归基线。[截图来源与待完成门禁](docs/visual-baselines.md)。
 
+### 在线体验
+
+公开网站只使用虚构合成数据，不扫描、不上传、也不修改访问者的配置。
+
+下列图片是公开网站的英文截图：Explore 展示仓库内置的虚构数据，Docs 展示源码构建说明；它们不是本地仪表盘的扫描结果。
+
+| 交互体验 | 文档与下载 |
+|---|---|
+| [![HarnessScope 合成交互体验](docs/assets/site-explore.png)](https://z-lab-boop.github.io/HarnessScope/explore.html) | [![HarnessScope 文档与下载页面](docs/assets/site-docs.png)](https://z-lab-boop.github.io/HarnessScope/docs.html) |
+
 Drift 保存脱敏的本地基线并比较规范化身份与指纹，不展示原始前后值、路径或时间差，也不作语义分析。名称允许 1–64 个 ASCII 字母、数字、点、下划线或连字符，首字符须为字母或数字；同名保存会替换旧基线。文件存于平台应用数据目录，仅用户可读写。
 
 ZIP 包含 `report.json`、离线 `report.html`、`README.txt`、`manifest.json`，选择基线后另含 `drift.json`。清单记录客户端等级、工具/Schema 版本、生成时间与成员 SHA-256；不打包原始配置、凭据、备份或会话令牌。浏览器仅下载到本地，CLI 覆盖既有文件须显式 `--force`。公开上传前仍需逐项人工检查。
@@ -85,4 +103,4 @@ ZIP 包含 `report.json`、离线 `report.html`、`README.txt`、`manifest.json`
 
 HarnessScope 不启动 MCP 服务、不访问远程配置端点、不猜测客户端未公开的内部行为。上下文 token 数是保守区间估计，不是供应商账单值。
 
-分析基于结构和已验证证据，不能理解指令语义或保证客户端实际运行行为；图谱筛选后保留缩放/平移状态尚未实现。[发布门禁](docs/release-gates.md) 给出可复现检查；真实 Linux 视觉基线及审阅仍是未关闭门禁，因此不能把功能测试通过等同于可正式发布。建库、推送与发布需另行操作。详细设计见 [架构文档](docs/architecture.md)，安全反馈见 [SECURITY.md](SECURITY.md)。项目采用 Apache-2.0 许可证。
+分析基于结构和已验证证据，不能理解指令语义或保证客户端实际运行行为；图谱筛选后保留缩放/平移状态尚未实现。[发布门禁](docs/release-gates.md) 给出可复现检查；真实 Linux 视觉基线及审阅仍是未关闭门禁，因此不能把源码与功能测试通过等同于已正式发布二进制。详细设计见 [架构文档](docs/architecture.md)，安全反馈见 [SECURITY.md](SECURITY.md)。项目采用 Apache-2.0 许可证。

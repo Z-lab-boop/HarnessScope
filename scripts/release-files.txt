@@ -8,7 +8,16 @@ THIRD_PARTY_NOTICES.md
 docs/architecture.md
 docs/release-gates.md
 docs/visual-baselines.md
+docs/assets/dashboard-export.png
+docs/assets/dashboard-findings.png
+docs/assets/dashboard-fix-confirmation.png
+docs/assets/dashboard-graph.png
 docs/assets/dashboard-overview.png
+docs/assets/harnessscope-hero.png
+docs/assets/harnessscope-logo.png
+docs/assets/site-docs.png
+docs/assets/site-explore.png
+docs/assets/site-hero.png
 docs/evidence/claude-2.1.259.md
 docs/evidence/codex-0.162.0-alpha.2.md
 docs/evidence/cursor-preview-2026-10-08.md

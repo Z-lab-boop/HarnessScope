@@ -1,0 +1,28 @@
+{
+  "schema_version": "1",
+  "nodes": [
+    { "id": "codex", "label": "Codex", "kind": "client", "client": "codex", "evidence": "CONFIRMED", "origin": "./.codex/config.toml" },
+    { "id": "claude", "label": "Claude Code", "kind": "client", "client": "claude", "evidence": "CONFIRMED", "origin": "./.claude/settings.json" },
+    { "id": "cursor", "label": "Cursor", "kind": "client", "client": "cursor", "evidence": "UNKNOWN", "origin": "./.cursor/rules/demo.mdc" },
+    { "id": "opencode", "label": "OpenCode", "kind": "client", "client": "opencode", "evidence": "LIKELY", "origin": "./opencode.json" },
+    { "id": "project-instructions", "label": "project instructions", "kind": "source", "client": "codex", "evidence": "CONFIRMED", "origin": "./AGENTS.md" },
+    { "id": "codex-mcp", "label": "Codex demo-tools", "kind": "mcp", "client": "codex", "evidence": "CONFIRMED", "origin": "./.codex/config.toml" },
+    { "id": "claude-mcp", "label": "Claude demo-tools", "kind": "mcp", "client": "claude", "evidence": "CONFIRMED", "origin": "./.claude/settings.json" },
+    { "id": "cursor-rule", "label": "Cursor project rule", "kind": "rule", "client": "cursor", "evidence": "UNKNOWN", "origin": "./.cursor/rules/demo.mdc" },
+    { "id": "opencode-instructions", "label": "OpenCode instructions", "kind": "source", "client": "opencode", "evidence": "LIKELY", "origin": "./instructions/demo.md" }
+  ],
+  "edges": [
+    { "from": "codex", "to": "project-instructions", "relation": "loads", "evidence": "CONFIRMED" },
+    { "from": "codex", "to": "codex-mcp", "relation": "loads", "evidence": "CONFIRMED" },
+    { "from": "claude", "to": "claude-mcp", "relation": "loads", "evidence": "CONFIRMED" },
+    { "from": "cursor", "to": "cursor-rule", "relation": "loads", "evidence": "UNKNOWN" },
+    { "from": "opencode", "to": "opencode-instructions", "relation": "loads", "evidence": "LIKELY" },
+    { "from": "codex-mcp", "to": "claude-mcp", "relation": "duplicates", "evidence": "LIKELY" }
+  ],
+  "conflict": { "title": "Fictional duplicate MCP declaration", "node_ids": ["codex-mcp", "claude-mcp"] },
+  "fix_preview": {
+    "title": "Remove the fictional duplicate declaration",
+    "risk": "SAFE",
+    "patch": ["--- ./.claude/settings.json", "+++ ./.claude/settings.json (preview)", "- demo-tools: duplicate declaration"]
+  }
+}

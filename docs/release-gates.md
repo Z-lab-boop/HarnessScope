@@ -4,6 +4,12 @@ Local candidates are supported for darwin/linux × amd64/arm64. Functional CI ru
 
 Archives use the explicit `scripts/release-files.txt` allowlist; internal design/plan directories are excluded. Each archive is checked for exact regular-file membership, freshly extracted, and scanned for personal paths and synthetic canaries. The shared local/GitHub builder strips an optional leading `v` from the requested version and injects it through `internal/buildinfo.Version`; `hscope --version`, Runtime and CLI/browser ZIP manifests share that value. Unstamped source builds identify as `0.2.0-dev`.
 
+## Public site gate
+
+The public website is a static, bilingual GitHub Pages artifact built from `web/site/`. Home and Docs retain readable English fallbacks without JavaScript; Explore is explicitly synthetic and performs only same-origin GET requests against the committed fictional dataset. The site has no scanner endpoint, analytics, cookies, telemetry or third-party runtime assets. Concept photographs under `web/site/assets/generated/` are decorative and are recorded as not being product screenshots; product evidence uses committed Playwright synthetic captures.
+
+`npm --prefix web run build:site` writes only ignored `dist/site/`. `npm --prefix web run test:site` checks translation, keyboard access, responsive layouts, subpath-safe assets, request boundaries, schema privacy and failure fallbacks. `npm --prefix web run capture:site` is an explicit maintenance action that refreshes the three reviewed README captures; ordinary builds never rewrite them. `node scripts/check-site-assets.mjs` validates PNG signatures, size bounds and bilingual README links. Ordinary CI runs all three checks. The Pages workflow accepts only `main`, including manual runs, and deploys only `dist/site/` after these checks pass. It rebuilds that output after tests to remove temporary shell-test fixtures before upload. It does not create a GitHub Release or modify repository contents. A passing local gate does not prove Pages is enabled or publicly deployed; verify the existing Pages source/custom domain before integration and verify the returned deployment URL afterwards.
+
 ## Reproduce the local gates
 
 Requirements: Go 1.24+, Node 22+, npm, a supported Playwright browser, POSIX shell, curl, unzip and shasum. Synthetic demo/smoke refuse machines with managed agent configuration. The sample macOS caches below keep Go/browser downloads out of the repository; choose appropriate writable paths on Linux.
@@ -18,11 +24,14 @@ go test -race ./...
 go vet ./...
 npm --prefix web ci
 npm --prefix web run build
+npm --prefix web run build:site
 (cd web && npx tsc --noEmit)
 git diff --exit-code -- internal/report/assets internal/server/assets
 go build -trimpath -o bin/hscope ./cmd/hscope
 npm --prefix web run test:visual
 npm --prefix web run test:dashboard
+npm --prefix web run test:site
+node scripts/check-site-assets.mjs
 node scripts/check-repository.mjs
 for script in scripts/*.sh demo/*.sh; do sh -n "$script"; done
 ./scripts/smoke-release.sh ./bin/hscope
