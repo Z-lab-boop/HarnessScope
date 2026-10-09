@@ -320,3 +320,74 @@ func TestHTTPCancellationReleasesActiveRequest(t *testing.T) {
 		t.Fatal("canceled scan published state")
 	}
 }
+
+func TestHTTPWaitDrainsMutationAfterForcedClose(t *testing.T) {
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var scans atomic.Int32
+	s := httpService(t, func(context.Context) (model.ScanResult, error) {
+		if scans.Add(1) == 1 {
+			return model.ScanResult{}, nil
+		}
+		close(entered)
+		<-release // Model a cancellation-proof transaction unwind.
+		return model.ScanResult{}, context.Canceled
+	})
+	i, err := Start(context.Background(), HTTPConfig{Service: s})
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, _ := url.Parse(i.URL())
+	fragment, _ := url.ParseQuery(u.Fragment)
+	u.Fragment = ""
+	base := strings.TrimSuffix(u.String(), "/")
+	req, _ := http.NewRequest("POST", base+"/api/v1/rescan", strings.NewReader(`{"revision":1}`))
+	req.Header.Set("X-HarnessScope-Token", fragment.Get("token"))
+	req.Header.Set("Origin", base)
+	req.Header.Set("Content-Type", "application/json")
+	requestDone := make(chan struct{})
+	go func() {
+		defer close(requestDone)
+		response, err := http.DefaultClient.Do(req)
+		if err == nil {
+			io.Copy(io.Discard, response.Body)
+			response.Body.Close()
+		}
+	}()
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("mutation did not start")
+	}
+	closeCtx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	if err := i.Close(closeCtx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("forced close error=%v", err)
+	}
+	waited := make(chan error, 1)
+	go func() { waited <- i.Wait() }()
+	select {
+	case err := <-waited:
+		t.Fatalf("Wait returned before mutation drained: %v", err)
+	case <-time.After(80 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case err := <-waited:
+		if err != nil && !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Wait deadlocked after mutation completed")
+	}
+	for n := 0; n < 4; n++ {
+		if err := i.Close(context.Background()); err != nil && !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatal(err)
+		}
+	}
+	select {
+	case <-requestDone:
+	case <-time.After(3 * time.Second):
+		t.Fatal("request goroutine leaked")
+	}
+}

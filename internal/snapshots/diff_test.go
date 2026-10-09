@@ -1,6 +1,7 @@
 package snapshots
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"reflect"
@@ -111,7 +112,7 @@ func TestCompareIsDeterministicAndValueSafe(t *testing.T) {
 	}
 }
 
-func TestCompareIgnoresValuesPathsTimesAndFreeText(t *testing.T) {
+func TestCompareIgnoresPrivateMetadataButFingerprintsSafeNodeSemantics(t *testing.T) {
 	baseline, current := driftFixture(), driftFixture()
 	baseline.RunMetadata = &model.RunMetadata{GeneratedAt: "2026-10-08", CWD: "/home/before"}
 	current.RunMetadata = &model.RunMetadata{GeneratedAt: "2026-10-09", CWD: "/home/after"}
@@ -135,12 +136,41 @@ func TestCompareIgnoresValuesPathsTimesAndFreeText(t *testing.T) {
 	current.Analysis.Findings[0].FixPlanID = "HARNESSSCOPE-CANARY"
 	current.Analysis.Findings[0].Origins[0].LogicalPath = "/private/finding"
 	got := Compare(current, baseline)
-	if len(got.Changes) != 0 || got.Changes == nil {
-		t.Fatalf("private fields caused drift: %+v", got)
+	if len(got.Changes) != 1 || got.Changes[0].EntityType != EntityNode || got.Changes[0].ID != "node_a" || got.Changes[0].Kind != ChangeChanged {
+		t.Fatalf("safe node semantics were not isolated from private metadata: %+v", got)
 	}
 	encoded, _ := json.Marshal(got)
-	if string(encoded) != `{"schema_version":"1.0.0","changes":[]}` {
-		t.Fatalf("empty diff=%s", encoded)
+	if strings.Contains(string(encoded), "HARNESSSCOPE-CANARY") || strings.Contains(string(encoded), "/private/") {
+		t.Fatalf("semantic drift leaked values=%s", encoded)
+	}
+}
+
+func TestCompareDetectsSafeValueAndLoadConditionWithoutLeakingEither(t *testing.T) {
+	baseline, current := driftFixture(), driftFixture()
+	baseline.Analysis.Graph.Nodes[0].Attributes = map[string]model.SafeValue{
+		"model": {Kind: "string", Display: "before-private-value", Present: true},
+		"token": {Kind: "secret", Display: "secret-before", SecretCategory: "credential", Present: true},
+	}
+	current.Analysis.Graph.Nodes[0].Attributes = map[string]model.SafeValue{
+		"model": {Kind: "string", Display: "after-private-value", Present: true},
+		"token": {Kind: "secret", Display: "secret-after", SecretCategory: "credential", Present: true},
+	}
+	current.Analysis.Graph.Nodes[0].LoadCondition = "only-after-private-condition"
+	got := Compare(current, baseline)
+	if len(got.Changes) != 1 || got.Changes[0].EntityType != EntityNode || got.Changes[0].Kind != ChangeChanged {
+		t.Fatalf("ordinary semantic change was missed: %+v", got)
+	}
+	encoded, _ := json.Marshal(got)
+	for _, private := range []string{"before-private-value", "after-private-value", "secret-before", "secret-after", "only-after-private-condition"} {
+		if bytes.Contains(encoded, []byte(private)) {
+			t.Fatalf("drift leaked %q: %s", private, encoded)
+		}
+	}
+	// Secret payload changes alone remain invisible; presence/category changes do not.
+	baseline = current
+	current.Analysis.Graph.Nodes[0].Attributes["token"] = model.SafeValue{Kind: "secret", Display: "another-secret", SecretCategory: "credential", Present: true}
+	if got := Compare(current, baseline); len(got.Changes) != 0 {
+		t.Fatalf("secret payload affected fingerprint: %+v", got)
 	}
 }
 

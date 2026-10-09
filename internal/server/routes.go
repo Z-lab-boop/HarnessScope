@@ -24,7 +24,11 @@ func NewHandler(service *Service, session Session) http.Handler {
 
 // The listener layer injects its logger and actual build version here.
 func newHandler(service *Service, session Session, logger *log.Logger, toolVersion string) http.Handler {
-	a := &apiHandler{service: service, session: session, logger: logger, toolVersion: toolVersion}
+	return newHandlerWithMutations(service, session, logger, toolVersion, nil)
+}
+
+func newHandlerWithMutations(service *Service, session Session, logger *log.Logger, toolVersion string, mutations *mutationGate) http.Handler {
+	a := &apiHandler{service: service, session: session, logger: logger, toolVersion: toolVersion, mutations: mutations}
 	mux := http.NewServeMux()
 	methods := make(map[string][]string)
 	register := func(method, path string, handler http.HandlerFunc) {
@@ -112,6 +116,7 @@ type apiHandler struct {
 	session     Session
 	logger      *log.Logger
 	toolVersion string
+	mutations   *mutationGate
 }
 
 func mutation[T any](a *apiHandler, call func(*http.Request, T) (any, error), status int) http.HandlerFunc {
@@ -120,6 +125,13 @@ func mutation[T any](a *apiHandler, call func(*http.Request, T) (any, error), st
 		if err := decodeStrict(w, r, &body); err != nil {
 			a.result(w, nil, err)
 			return
+		}
+		if a.mutations != nil {
+			if !a.mutations.begin() {
+				writeAPIError(w, http.StatusServiceUnavailable, "server_closing", "The local server is shutting down.")
+				return
+			}
+			defer a.mutations.end()
 		}
 		value, err := call(r, body)
 		if err != nil {

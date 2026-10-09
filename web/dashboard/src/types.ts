@@ -33,7 +33,7 @@ export interface Drift { schema_version: string; baseline?: string; changes: Ite
 export interface DashboardState { schema_version: string; revision: number; scanned_at: string; workspace: string; result: ScanResult; fix_plans: Items<FixPlan>; backups: Items<BackupSummary>; drift?: Drift }
 export interface APIErrorEnvelope { code: string; message: string; details: Record<string, string> }
 export interface ExplainResponse { node: ConfigNode; edges: Items<Edge> }
-export interface ComparisonRow { name: string; type: NodeType; status: string; left?: ConfigNode; right?: ConfigNode }
+export interface ComparisonRow { name: string; type: NodeType; status: "Missing" | "Present" | "Divergent"; left?: Items<ConfigNode>; right?: Items<ConfigNode> }
 export interface ComparisonResponse { left: string; right: string; rows: Items<ComparisonRow> }
 export type Route = "overview" | "graph" | "findings" | "compare" | "fixes" | "drift" | "export";
 export interface Filters { text: string; client: string; scope: string; evidence: string; severity: string }

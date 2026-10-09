@@ -61,11 +61,11 @@ type ComparisonResponse struct {
 	Rows  []ComparisonRow `json:"rows"`
 }
 type ComparisonRow struct {
-	Name   string            `json:"name"`
-	Type   model.NodeType    `json:"type"`
-	Status string            `json:"status"`
-	Left   *model.ConfigNode `json:"left,omitempty"`
-	Right  *model.ConfigNode `json:"right,omitempty"`
+	Name   string             `json:"name"`
+	Type   model.NodeType     `json:"type"`
+	Status string             `json:"status"`
+	Left   []model.ConfigNode `json:"left,omitempty"`
+	Right  []model.ConfigNode `json:"right,omitempty"`
 }
 
 type ScanFunc func(context.Context) (model.ScanResult, error)

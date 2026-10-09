@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -115,6 +116,12 @@ func (s *Service) PlanFixes(ctx context.Context, expectedRevision uint64, ids []
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	// The preview is also the authority for a later apply at this revision.
+	// Keep the unsanitized edits private; ApplyFixes must never substitute a
+	// newly generated same-ID plan for the bytes the user reviewed here.
+	s.mu.Lock()
+	s.raw.Analysis.FixPlans = plans
+	s.mu.Unlock()
 	if public.Analysis.FixPlans == nil {
 		return []model.FixPlan{}, nil
 	}
@@ -138,33 +145,25 @@ func (s *Service) ApplyFixes(ctx context.Context, expectedRevision uint64, ids [
 		return DashboardState{}, err
 	}
 	published := s.State()
+	publishedIDs := make(map[string]bool, len(published.FixPlans))
 	for _, id := range ids {
-		found := false
 		for _, plan := range published.FixPlans {
 			if plan.ID == id {
+				publishedIDs[id] = true
 				if plan.Risk != model.RiskSafe {
 					return DashboardState{}, ErrUnsafeFix
 				}
-				found = true
 				break
 			}
 		}
-		if !found {
-			return DashboardState{}, ErrNotFound
-		}
 	}
-	raw, err := s.config.Scan(ctx)
-	if err != nil {
-		return DashboardState{}, err
-	}
-	plans, err := fixes.Plan(raw, nil)
-	if err != nil {
-		return DashboardState{}, err
-	}
+	s.mu.RLock()
+	reviewed := append([]model.FixPlan(nil), s.raw.Analysis.FixPlans...)
+	s.mu.RUnlock()
 	selected := make([]model.FixPlan, 0, len(ids))
 	for _, id := range ids {
 		found := false
-		for _, plan := range plans {
+		for _, plan := range reviewed {
 			if plan.ID != id {
 				continue
 			}
@@ -176,8 +175,17 @@ func (s *Service) ApplyFixes(ctx context.Context, expectedRevision uint64, ids [
 			break
 		}
 		if !found {
+			if publishedIDs[id] {
+				// The ID was public at this revision but is no longer bound to an
+				// exact private preview. Fail closed and require a new preview.
+				return DashboardState{}, fixes.ErrTargetChanged
+			}
 			return DashboardState{}, ErrNotFound
 		}
+	}
+	raw, err := s.config.Scan(ctx)
+	if err != nil {
+		return DashboardState{}, err
 	}
 	// Keep the planner's canonical transaction order, independent of UI order.
 	sort.Slice(selected, func(i, j int) bool { return selected[i].ID < selected[j].ID })
@@ -437,24 +445,24 @@ func (s *Service) CompareClients(left, right string) (ComparisonResponse, error)
 			rows[key] = &ComparisonRow{Name: node.DisplayName, Type: node.Type}
 		}
 		row := rows[key]
-		if node.Client == left && row.Left == nil {
-			owned := node
-			row.Left = &owned
+		if node.Client == left {
+			row.Left = append(row.Left, node)
 		}
-		if node.Client == right && row.Right == nil {
-			owned := node
-			row.Right = &owned
+		if node.Client == right {
+			row.Right = append(row.Right, node)
 		}
 	}
 	result := ComparisonResponse{Left: left, Right: right, Rows: []ComparisonRow{}}
 	for _, row := range rows {
+		sort.Slice(row.Left, func(i, j int) bool { return comparisonNodeKey(row.Left[i]) < comparisonNodeKey(row.Left[j]) })
+		sort.Slice(row.Right, func(i, j int) bool { return comparisonNodeKey(row.Right[i]) < comparisonNodeKey(row.Right[j]) })
 		switch {
-		case row.Left == nil || row.Right == nil:
-			row.Status = "missing"
-		case reflect.DeepEqual(row.Left.Attributes, row.Right.Attributes):
-			row.Status = "same"
+		case len(row.Left) == 0 || len(row.Right) == 0:
+			row.Status = "Missing"
+		case reflect.DeepEqual(comparisonSignatures(row.Left), comparisonSignatures(row.Right)):
+			row.Status = "Present"
 		default:
-			row.Status = "different"
+			row.Status = "Divergent"
 		}
 		result.Rows = append(result.Rows, *row)
 	}
@@ -465,6 +473,43 @@ func (s *Service) CompareClients(left, right string) (ComparisonResponse, error)
 		return result.Rows[i].Type < result.Rows[j].Type
 	})
 	return result, nil
+}
+
+func comparisonNodeKey(node model.ConfigNode) string {
+	return comparisonAttributeSignature(node) + "\x00" + node.ID
+}
+
+func comparisonSignatures(nodes []model.ConfigNode) []string {
+	values := make([]string, 0, len(nodes))
+	for _, node := range nodes {
+		values = append(values, comparisonAttributeSignature(node))
+	}
+	sort.Strings(values)
+	return values
+}
+
+func comparisonAttributeSignature(node model.ConfigNode) string {
+	type field struct {
+		Key, Kind, SecretCategory, Display string
+		Present                            bool
+	}
+	keys := make([]string, 0, len(node.Attributes))
+	for key := range node.Attributes {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	fields := make([]field, 0, len(keys))
+	for _, key := range keys {
+		value := node.Attributes[key]
+		display := value.Display
+		kind := strings.ToLower(value.Kind)
+		if value.SecretCategory != "" || strings.Contains(kind, "secret") || strings.Contains(kind, "credential") || strings.Contains(kind, "redact") {
+			display = "[REDACTED]"
+		}
+		fields = append(fields, field{key, value.Kind, value.SecretCategory, display, value.Present})
+	}
+	data, _ := json.Marshal(fields)
+	return string(data)
 }
 
 // ListSnapshots never returns store-internal filesystem capabilities.
@@ -482,7 +527,8 @@ func (s *Service) ListSnapshots(ctx context.Context) ([]snapshots.Metadata, erro
 }
 
 // Browser/report plans describe operations without publishing instruction bytes
-// or replacement payloads. Raw plans stay private and are rebuilt before apply.
+// or replacement payloads. Raw plans stay private and remain bound to the
+// revision/preview that authorized a later apply.
 func redactPublicPlans(plans []model.FixPlan) {
 	for i := range plans {
 		for j := range plans[i].Edits {
@@ -510,6 +556,7 @@ func (s *Service) prepare(raw model.ScanResult, revision uint64) (model.ScanResu
 	}
 	// Include plans in the shared report sanitizer, keeping transaction paths
 	// private while giving reports, snapshots and the dashboard identical plans.
+	owned.Analysis.FixPlans = plans
 	withPlans := owned
 	withPlans.Analysis.FixPlans = plans
 	public, err := sanitize.Report(withPlans, s.config.HomeDir, s.config.Workspace)

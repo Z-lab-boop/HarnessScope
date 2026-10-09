@@ -83,7 +83,7 @@ func TestRoutesReadContracts(t *testing.T) {
 	}
 	var comparison ComparisonResponse
 	routeJSON(t, routeRequest(t, h, session, "GET", "/api/v1/compare?left=codex&right=claude", "", nil), 200, &comparison)
-	if len(comparison.Rows) != 1 || comparison.Rows[0].Status != "different" || comparison.Rows[0].Name != "model" {
+	if len(comparison.Rows) != 1 || comparison.Rows[0].Status != "Divergent" || comparison.Rows[0].Name != "model" {
 		t.Fatalf("wrong selected-client matrix: %+v", comparison)
 	}
 	for _, path := range []string{"/api/v1/backups", "/api/v1/snapshots"} {

@@ -507,6 +507,82 @@ func TestServicePlanRefreshesAndSanitizesWithoutPublishing(t *testing.T) {
 	}
 }
 
+func TestServiceApplyRequiresExactReviewedPlanBytes(t *testing.T) {
+	s, paths, _ := serviceFixture(t, 1, nil)
+	id := s.State().FixPlans[0].ID
+	changed := []byte("swap\nswap\n")
+	if err := os.WriteFile(paths[0], changed, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ApplyFixes(context.Background(), 1, []string{id}); !errors.Is(err, fixes.ErrTargetChanged) {
+		t.Fatalf("same-ID regenerated plan was accepted: %v", err)
+	}
+	if data, _ := os.ReadFile(paths[0]); !bytes.Equal(data, changed) || s.State().Revision != 1 {
+		t.Fatal("conflicted apply changed target or revision")
+	}
+	plans, err := s.PlanFixes(context.Background(), 1, nil)
+	if err != nil || len(plans) != 1 || plans[0].ID != id {
+		t.Fatalf("fresh preview=%+v err=%v", plans, err)
+	}
+	applied, err := s.ApplyFixes(context.Background(), 1, []string{id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(paths[0]); string(data) != "swap\n" || applied.Revision != 2 {
+		t.Fatalf("fresh reviewed plan was not applied: state=%+v data=%q", applied, data)
+	}
+}
+
+func TestServiceApplyAcceptsFreshPreviewIDAtSameRevision(t *testing.T) {
+	s, paths, _ := serviceFixture(t, 1, nil)
+	oldID := s.State().FixPlans[0].ID
+	if err := os.WriteFile(paths[0], []byte("longer\nlonger\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	plans, err := s.PlanFixes(context.Background(), 1, nil)
+	if err != nil || len(plans) != 1 || plans[0].ID == oldID {
+		t.Fatalf("expected a fresh exact preview ID: %+v err=%v", plans, err)
+	}
+	applied, err := s.ApplyFixes(context.Background(), 1, []string{plans[0].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(paths[0]); string(data) != "longer\n" || applied.Revision != 2 {
+		t.Fatalf("fresh preview was not authoritative: state=%+v data=%q", applied, data)
+	}
+}
+
+func TestServiceCompareClientsUsesCompleteDeclarationSets(t *testing.T) {
+	root := t.TempDir()
+	raw := model.ScanResult{Analysis: model.Analysis{
+		Clients: []model.ClientResult{{ID: "left"}, {ID: "right"}},
+		Graph: model.Graph{Nodes: []model.ConfigNode{
+			{ID: "left-user", Type: model.NodeRule, Client: "left", DisplayName: "setting.model", Attributes: map[string]model.SafeValue{"value": {Kind: "string", Display: "same", Present: true}}},
+			{ID: "left-project", Type: model.NodeRule, Client: "left", DisplayName: "setting.model", Attributes: map[string]model.SafeValue{"value": {Kind: "string", Display: "project", Present: true}}},
+			{ID: "right-user", Type: model.NodeRule, Client: "right", DisplayName: "setting.model", Attributes: map[string]model.SafeValue{"value": {Kind: "string", Display: "same", Present: true}}},
+		}},
+	}}
+	s, err := NewService(ServiceConfig{Workspace: root, HomeDir: filepath.Dir(root), AppDataDir: filepath.Join(root, "data"), Scan: func(context.Context) (model.ScanResult, error) { return raw, nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	comparison, err := s.CompareClients("left", "right")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(comparison.Rows) != 1 || comparison.Rows[0].Status != "Divergent" || len(comparison.Rows[0].Left) != 2 || len(comparison.Rows[0].Right) != 1 {
+		t.Fatalf("declarations were collapsed: %+v", comparison)
+	}
+	raw.Analysis.Graph.Nodes = append(raw.Analysis.Graph.Nodes, model.ConfigNode{ID: "right-project", Type: model.NodeRule, Client: "right", DisplayName: "setting.model", Attributes: map[string]model.SafeValue{"value": {Kind: "string", Display: "project", Present: true}}})
+	if _, err := s.Rescan(context.Background(), 1); err != nil {
+		t.Fatal(err)
+	}
+	comparison, err = s.CompareClients("left", "right")
+	if err != nil || comparison.Rows[0].Status != "Present" || len(comparison.Rows[0].Right) != 2 {
+		t.Fatalf("complete equal sets disagreed with dashboard semantics: %+v err=%v", comparison, err)
+	}
+}
+
 func TestServiceSnapshotDriftAndExportUsePublicState(t *testing.T) {
 	s, paths, calls := serviceFixture(t, 1, nil)
 	meta, err := s.SaveSnapshot(context.Background(), 1, "baseline")
@@ -635,5 +711,59 @@ func TestServiceInitialStateIsSanitizedAndImmutable(t *testing.T) {
 	fresh := s.State()
 	if fresh.Result.Analysis.Graph.Nodes[0].Attributes["path"].Display != "~/private" || fresh.FixPlans[0].Edits[0].TargetPath != "./AGENTS.md" || fresh.Result.Analysis.Sources[0].ID != "source" {
 		t.Fatalf("caller changed state: %+v", fresh)
+	}
+}
+
+func TestServiceEscapedRootsStayOutOfSnapshotsAndExports(t *testing.T) {
+	outer := t.TempDir()
+	home := filepath.Join(outer, "R&D<private>")
+	workspace := filepath.Join(home, "work&bench")
+	if err := os.MkdirAll(workspace, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	workspacePath := filepath.Join(workspace, "config.json")
+	homePath := filepath.Join(home, "bin", "tool")
+	raw := model.ScanResult{Analysis: model.Analysis{Graph: model.Graph{Nodes: []model.ConfigNode{{
+		ID: "node", Type: model.NodeRule, Client: "codex", DisplayName: workspacePath,
+		Attributes: map[string]model.SafeValue{workspacePath: {Kind: "string", Display: homePath, Present: true}},
+	}}}}}
+	s, err := NewService(ServiceConfig{Workspace: workspace, HomeDir: home, AppDataDir: filepath.Join(outer, "data"), Scan: func(context.Context) (model.ScanResult, error) { return raw, nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SaveSnapshot(context.Background(), 1, "escaped"); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := os.ReadFile(filepath.Join(outer, "data", "snapshots", "escaped.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bundle bytes.Buffer
+	if _, err := s.Export(context.Background(), 1, &bundle, "0.2.0"); err != nil {
+		t.Fatal(err)
+	}
+	artifacts := map[string][]byte{"snapshot": snapshot}
+	archive, err := zip.NewReader(bytes.NewReader(bundle.Bytes()), int64(bundle.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range archive.File {
+		reader, err := file.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := io.ReadAll(reader)
+		reader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		artifacts["export/"+file.Name] = data
+	}
+	for label, data := range artifacts {
+		for _, private := range []string{home, workspace, `R\u0026D`, `work\u0026bench`, `\u003cprivate\u003e`} {
+			if bytes.Contains(data, []byte(private)) {
+				t.Fatalf("%s leaked escaped root %q", label, private)
+			}
+		}
 	}
 }

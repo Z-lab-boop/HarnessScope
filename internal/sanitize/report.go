@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Z-lab-boop/harnessscope/internal/model"
+	"github.com/Z-lab-boop/harnessscope/internal/secrets"
 )
 
 // Report returns a canonical deep copy with workspace and home paths collapsed.
@@ -23,17 +24,22 @@ func Report(input model.ScanResult, homeDir, workspaceRoot string) (model.ScanRe
 	if root == string(filepath.Separator) {
 		return model.ScanResult{}, fmt.Errorf("public report workspace root is the filesystem root")
 	}
-	data, err := model.MarshalCanonical(input)
-	if err != nil {
-		return model.ScanResult{}, fmt.Errorf("marshal safe report: %w", err)
+	if input.SchemaVersion == "" {
+		input.SchemaVersion = model.ReportSchemaVersion
 	}
-	text := strings.ReplaceAll(string(data), root, ".")
 	home := filepath.Clean(homeDir)
-	if homeDir != "" && home != "." && home != string(filepath.Separator) {
-		text = strings.ReplaceAll(text, home, "~")
+	data, err := secrets.MapJSONStrings(model.Canonicalize(input), func(text string) string {
+		text = strings.ReplaceAll(text, root, ".")
+		if homeDir != "" && home != "." && home != string(filepath.Separator) {
+			text = strings.ReplaceAll(text, home, "~")
+		}
+		return text
+	})
+	if err != nil {
+		return model.ScanResult{}, fmt.Errorf("sanitize public report strings: %w", err)
 	}
 	var output model.ScanResult
-	if err := json.Unmarshal([]byte(text), &output); err != nil {
+	if err := json.Unmarshal(data, &output); err != nil {
 		return model.ScanResult{}, fmt.Errorf("decode safe report: %w", err)
 	}
 	return model.Canonicalize(output), nil

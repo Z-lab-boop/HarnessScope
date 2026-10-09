@@ -30,12 +30,55 @@ var assets embed.FS
 // Instance owns the listener and its shutdown. Wait completes only after the
 // listener and the bounded graceful shutdown have both finished.
 type Instance struct {
-	server   *http.Server
-	url      string
-	stop     chan struct{}
-	done     chan struct{}
-	stopOnce sync.Once
-	err      error // Published by closing done.
+	server    *http.Server
+	mutations *mutationGate
+	url       string
+	stop      chan struct{}
+	done      chan struct{}
+	stopOnce  sync.Once
+	err       error // Published by closing done.
+}
+
+// mutationGate is independent of net/http's connection lifecycle. A forced
+// Server.Close cancels request contexts but cannot make a transaction's
+// cancellation-proof rollback disappear; Wait therefore drains this gate.
+type mutationGate struct {
+	mu      sync.Mutex
+	active  int
+	closing bool
+	drained chan struct{}
+}
+
+func newMutationGate() *mutationGate { return &mutationGate{drained: make(chan struct{})} }
+
+func (g *mutationGate) begin() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closing {
+		return false
+	}
+	g.active++
+	return true
+}
+
+func (g *mutationGate) end() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.active--
+	if g.closing && g.active == 0 {
+		close(g.drained)
+	}
+}
+
+func (g *mutationGate) closeAndWait() {
+	g.mu.Lock()
+	g.closing = true
+	if g.active == 0 {
+		close(g.drained)
+	}
+	drained := g.drained
+	g.mu.Unlock()
+	<-drained
 }
 
 func Start(ctx context.Context, config HTTPConfig) (*Instance, error) {
@@ -70,9 +113,10 @@ func Start(ctx context.Context, config HTTPConfig) (*Instance, error) {
 		listener.Close()
 		return nil, err
 	}
-	api := newHandler(config.Service, session, config.Logger, config.ToolVersion)
+	mutations := newMutationGate()
+	api := newHandlerWithMutations(config.Service, session, config.Logger, config.ToolVersion, mutations)
 	requestCtx, cancelRequests := context.WithCancel(ctx)
-	i := &Instance{url: "http://" + listener.Addr().String() + "/#token=" + session.Token(), stop: make(chan struct{}), done: make(chan struct{})}
+	i := &Instance{url: "http://" + listener.Addr().String() + "/#token=" + session.Token(), mutations: mutations, stop: make(chan struct{}), done: make(chan struct{})}
 	i.server = &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			setSecurityHeaders(w.Header())
@@ -111,6 +155,7 @@ func Start(ctx context.Context, config HTTPConfig) (*Instance, error) {
 		if errors.Is(serveErr, http.ErrServerClosed) {
 			serveErr = nil
 		}
+		i.mutations.closeAndWait()
 		i.err = errors.Join(serveErr, shutdownErr)
 		close(i.done)
 	}()

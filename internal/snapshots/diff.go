@@ -24,14 +24,20 @@ type normalizedOrigin struct {
 	PrecedenceRank int
 }
 
+type normalizedAttribute struct {
+	KeyDigest, KindDigest, SecretCategory, ValueDigest string
+	Present                                            bool
+}
+
 type entity struct {
 	kind, id string
 	clients  []string
 	records  map[string]struct{}
 }
 
-// Compare projects each report into an explicit field allowlist. SafeValue
-// attributes, free text, timestamps, and paths never enter its fingerprints.
+// Compare projects each report into an explicit field allowlist. Non-secret
+// semantic values enter only as one-way digests; free text, timestamps, paths,
+// and secret payloads never appear in public drift output.
 // Reports loaded through Store already passed report schema-major validation.
 func Compare(current, baseline model.ScanResult) Diff {
 	n := normalizer{redactor: secrets.NewRedactor()}
@@ -105,9 +111,11 @@ func (n normalizer) entities(input model.ScanResult) map[string]*entity {
 	}
 	for _, node := range input.Analysis.Graph.Nodes {
 		add(EntityNode, n.token(node.ID), []string{node.Client}, struct {
-			Type, Client, Confidence string
-			Origins                  []normalizedOrigin
-		}{n.token(string(node.Type)), n.token(node.Client), n.token(string(node.AdapterConfidence)), n.origins(node.Origins)})
+			Type, Client, Confidence               string
+			DisplayNameDigest, LoadConditionDigest string
+			Attributes                             []normalizedAttribute
+			Origins                                []normalizedOrigin
+		}{n.token(string(node.Type)), n.token(node.Client), n.token(string(node.AdapterConfidence)), digest(node.DisplayName), digest(node.LoadCondition), n.attributes(node.Attributes), n.origins(node.Origins)})
 	}
 	for _, finding := range input.Analysis.Findings {
 		origins := n.origins(finding.Origins)
@@ -131,6 +139,27 @@ func (n normalizer) entities(input model.ScanResult) map[string]*entity {
 		}{ruleID, n.token(string(finding.Severity)), n.token(string(finding.Evidence)), n.tokens(finding.AffectedClients), n.tokens(finding.GraphReferences), origins})
 	}
 	return result
+}
+
+func (n normalizer) attributes(input map[string]model.SafeValue) []normalizedAttribute {
+	values := make([]normalizedAttribute, 0, len(input))
+	for key, value := range input {
+		redacted := n.redactor.RedactField(key, value.Display)
+		secretCategory := value.SecretCategory
+		if secretCategory == "" {
+			secretCategory = redacted.SecretCategory
+		}
+		normalized := normalizedAttribute{
+			KeyDigest: digest(key), KindDigest: digest(value.Kind),
+			SecretCategory: n.token(secretCategory), Present: value.Present,
+		}
+		if secretCategory == "" && redacted.Display == value.Display {
+			normalized.ValueDigest = digest(value.Display)
+		}
+		values = append(values, normalized)
+	}
+	sort.Slice(values, func(i, j int) bool { return encode(values[i]) < encode(values[j]) })
+	return values
 }
 
 func (n normalizer) token(input string) string {

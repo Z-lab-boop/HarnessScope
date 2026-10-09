@@ -2,7 +2,9 @@ package sanitize
 
 import (
 	"bytes"
+	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Z-lab-boop/harnessscope/internal/model"
@@ -60,6 +62,31 @@ func TestReportCollapsesEveryPublicPathWithoutMutatingInput(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestReportSanitizesJSONEscapedRootsInValuesAndKeys(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "R&D<private>")
+	root := filepath.Join(home, "work&bench")
+	path := filepath.Join(root, "config.json")
+	input := fixtureResultWithPaths(home, root)
+	input.Analysis.Graph.Nodes[0].Attributes = map[string]model.SafeValue{
+		path: {Kind: "string", Display: path, Present: true},
+	}
+	got, err := Report(input, home, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(encoded, []byte(home)) || bytes.Contains(encoded, []byte(root)) || strings.Contains(string(encoded), `R\u0026D`) {
+		t.Fatalf("escaped root leaked: %s", encoded)
+	}
+	value, ok := got.Analysis.Graph.Nodes[0].Attributes["./config.json"]
+	if !ok || value.Display != "./config.json" {
+		t.Fatalf("decoded strings were not sanitized: %+v", got.Analysis.Graph.Nodes[0].Attributes)
 	}
 }
 
