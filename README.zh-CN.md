@@ -27,7 +27,7 @@ go build -trimpath -o bin/hscope ./cmd/hscope
 ./bin/hscope serve . --port 0 --open
 ```
 
-GitHub Releases 当前仅作为信息入口。源码、测试和候选归档已经公开，但真实 Linux 视觉基线仍需人工审阅；生成本地候选包不代表已正式发布。
+GitHub Releases 当前仅作为信息入口。源码和测试已经公开；四平台候选归档已在本地验证，但真实 Linux 视觉基线仍需人工审阅；生成本地候选包不代表已正式发布。
 
 默认情况下，JSON 与单文件离线 HTML 报告写入系统应用数据目录，不污染被扫描的仓库。只想看终端结果时可加 `--no-report`。
 

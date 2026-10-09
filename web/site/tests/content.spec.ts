@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import { content, english, type ContentKey } from "../src/content.js";
 
 test("translation dictionaries have exact nonempty bilingual keys", () => {
@@ -52,6 +53,21 @@ test("Docs states the truthful release boundary", async ({ page }) => {
   await expect(page.locator(".client-matrix")).toContainText("2.1.259");
   await expect(page.getByText("VERIFIED", { exact: true })).toHaveCount(2);
   await expect(page.getByText("PREVIEW", { exact: true })).toHaveCount(2);
+  for (const locale of ["en", "zh-CN"] as const) {
+    if (locale === "zh-CN") await page.getByRole("button", { name: "切换到中文" }).click();
+    const release = page.locator('[data-i18n="docs.releaseBody"]');
+    await expect(release).toContainText(locale === "en" ? "Source and tests are public; candidate archives were verified locally." : "源码和测试已经公开；候选归档已在本地验证。");
+    await expect(page.locator('[data-i18n="docs.releaseTitle"]')).toHaveText(content[locale]["docs.releaseTitle"]);
+  }
+});
+
+test("README release claims distinguish public source from local candidate archives", () => {
+  for (const file of ["README.md", "README.zh-CN.md"]) {
+    const readme = readFileSync(new URL(`../../../${file}`, import.meta.url), "utf8");
+    expect(readme).toContain("源码和测试已经公开；四平台候选归档已在本地验证");
+    expect(readme).not.toMatch(/候选归档[^。\n]*已[经]?公开/);
+    expect(readme).toContain("尚未发布带标签的正式二进制版本");
+  }
 });
 
 for (const width of [360, 768, 1440]) test(`Docs translation has no overflow at ${width}px`, async ({ page }) => {
@@ -94,6 +110,8 @@ test("JavaScript fallback Docs retains commands, navigation and privacy", async 
   await expect(page.getByText(content.en["docs.localBody"], { exact: true })).toBeVisible();
   await expect(page.getByText(content.en["docs.privacyBody"], { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "GitHub Releases" })).toBeVisible();
+  await expect(page.locator('[data-i18n="docs.releaseBody"]')).toContainText("Source and tests are public; candidate archives were verified locally.");
+  await expect(page.locator('[data-i18n="docs.releaseTitle"]')).toHaveText("No tagged binary release is published yet.");
   await expect(page.getByRole("link", { name: "English overview", exact: true })).toHaveAttribute("href", "https://github.com/Z-lab-boop/HarnessScope/blob/main/README.md#english-overview");
 });
 

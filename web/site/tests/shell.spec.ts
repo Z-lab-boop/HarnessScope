@@ -74,3 +74,71 @@ test("static server rejects encoded traversal", async ({ request }) => {
   const response = await request.get("/HarnessScope/%2e%2e%2fpackage.json");
   expect(response.status()).toBe(400);
 });
+
+function contrast(first: string, second: string) {
+  const luminance = (color: string) => {
+    const channels = color.match(/[\d.]+/g)!.slice(0, 3).map(value => {
+      const channel = Number(value) / 255;
+      return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4;
+    });
+    return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
+  };
+  const values = [luminance(first), luminance(second)].sort((a, b) => b - a);
+  return (values[0] + .05) / (values[1] + .05);
+}
+
+for (const width of [360, 1440]) for (const path of ["/", "/explore.html", "/docs.html"]) {
+  test(`keyboard focus contrasts with light and dark surfaces on ${path} at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(path);
+    if (path === "/explore.html") {
+      await expect(page.locator("[data-explore-workbench]")).toBeVisible();
+      await page.getByRole("button", { name: "Show conflicts" }).click();
+      await page.getByRole("button", { name: "Preview safe fix" }).click();
+    }
+    // Keyboard modality also makes programmatic focus match :focus-visible.
+    await page.keyboard.press("Tab");
+    const controls = page.locator('a[href], button, select, [tabindex]:not([tabindex="-1"])');
+    let darkControls = 0;
+    let lightControls = 0;
+    for (const control of await controls.all()) {
+      if (!await control.isVisible()) continue;
+      await control.focus();
+      await control.scrollIntoViewIfNeeded();
+      await expect(control).toBeFocused();
+      await expect(control).toBeInViewport();
+      const ring = await control.evaluate(element => {
+        const style = getComputedStyle(element);
+        const graph = element.querySelector(".graph-hit");
+        let background = "";
+        for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+          const color = getComputedStyle(parent).backgroundColor;
+          if (color !== "rgba(0, 0, 0, 0)" && color !== "transparent") { background = color; break; }
+        }
+        return {
+          visible: element.matches(":focus-visible"), background,
+          color: graph ? getComputedStyle(graph).stroke : style.outlineColor,
+          width: graph ? getComputedStyle(graph).strokeWidth : style.outlineWidth,
+          style: graph ? "solid" : style.outlineStyle,
+          offset: graph ? "4px" : style.outlineOffset,
+        };
+      });
+      expect(ring.visible).toBe(true);
+      expect(ring.style).toBe("solid");
+      expect(parseFloat(ring.width)).toBeGreaterThanOrEqual(3);
+      expect(parseFloat(ring.offset)).toBeGreaterThanOrEqual(2);
+      expect(contrast(ring.color, ring.background), `${path}: ${await control.textContent()}`).toBeGreaterThanOrEqual(3);
+      if (ring.background === "rgb(6, 21, 40)") {
+        darkControls++;
+        expect(ring.color).toBe("rgb(255, 102, 127)");
+      } else {
+        lightControls++;
+        // The default must also remain visible on the inspector's light surface.
+        expect(contrast(ring.color, "rgb(238, 232, 218)")).toBeGreaterThanOrEqual(3);
+        expect(contrast(ring.color, "rgb(231, 223, 207)")).toBeGreaterThanOrEqual(3);
+      }
+    }
+    expect(lightControls).toBeGreaterThan(0);
+    if (path !== "/docs.html") expect(darkControls).toBeGreaterThan(0);
+  });
+}

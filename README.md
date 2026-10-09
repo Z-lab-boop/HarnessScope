@@ -159,9 +159,9 @@ hscope --version
 
 ## 🚦 当前状态
 
-- ✅ 源码、双平台 CI、竞态测试、浏览器回归和四平台候选归档验证已公开。
+- ✅ 源码和测试已经公开；四平台候选归档已在本地验证。
 - 🟡 Linux 的 Report、Overview、Graph 三套人工审核视觉基线仍为 **OPEN**。
-- 🔒 正式 Release 工作流会在上述门禁关闭前拒绝发布；当前没有伪装成正式版的二进制下载。
+- 🔒 正式 Release 工作流会在上述门禁关闭前拒绝发布；当前尚未发布带标签的正式二进制版本。
 - 🧭 后续方向：扩展版本证据、更多客户端适配、图谱视口持久化与正式签名发布。
 
 详细边界见 [发布门禁](docs/release-gates.md)、[视觉证据](docs/visual-baselines.md)、[架构](docs/architecture.md) 与 [安全策略](SECURITY.md)。
@@ -176,7 +176,7 @@ hscope --version
 
 HarnessScope is a local, offline configuration observatory for coding agents. It discovers configuration and instruction sources, explains provenance, surfaces structural risks, previews strictly bounded SAFE fixes, tracks sanitized drift, and exports deterministic diagnostic bundles. Codex and Claude Code adapters have version-specific verified evidence; Cursor and OpenCode remain conservative previews. No cloud service, telemetry, or background monitoring is involved.
 
-Build from source with Go 1.24 or newer. A tagged binary release is intentionally blocked until the reviewed Linux visual baseline gate is closed.
+Build from source with Go 1.24 or newer. Source and tests are public; candidate archives were verified locally. No tagged binary release is published yet; publication is blocked until the reviewed Linux visual baseline gate is closed.
 </details>
 
 ---

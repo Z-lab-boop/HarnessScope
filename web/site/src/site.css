@@ -2,7 +2,8 @@
 * { box-sizing:border-box; }
 body { margin:0; color:var(--ink); background:var(--paper); font-family:"Iowan Old Style",Baskerville,Palatino,serif; }
 .technical, nav, button { font-family:"Berkeley Mono","SFMono-Regular",Menlo,monospace; }
-:focus-visible { outline:3px solid var(--coral); outline-offset:4px; }
+:focus-visible { outline:3px solid var(--ink); outline-offset:4px; }
+:is(.observatory,.hero-evidence,.client-section,.explore-field,.explore-preview,.terminal-panel,.docs-tiers) :focus-visible { outline-color:var(--coral); }
 a { color:inherit; text-underline-offset:.25em; }
 .skip-link { position:absolute; top:.5rem; left:1rem; padding:1rem; background:var(--paper); transform:translateY(-200%); z-index:2; }
 .skip-link:focus { transform:none; }
