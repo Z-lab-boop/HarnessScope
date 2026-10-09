@@ -85,4 +85,4 @@ ZIP 包含 `report.json`、离线 `report.html`、`README.txt`、`manifest.json`
 
 HarnessScope 不启动 MCP 服务、不访问远程配置端点、不猜测客户端未公开的内部行为。上下文 token 数是保守区间估计，不是供应商账单值。
 
-分析基于结构和已验证证据，不能理解指令语义或保证客户端实际运行行为；图谱筛选后保留缩放/平移状态尚未实现。[发布门禁](docs/release-gates.md) 给出可复现检查；真实 Linux 视觉基线及审阅仍是未关闭门禁，因此不能把源码与功能测试通过等同于已正式发布二进制。详细设计见 [架构文档](docs/architecture.md)，安全反馈见 [SECURITY.md](SECURITY.md)。项目采用 Apache-2.0 许可证。
+分析基于结构和已验证证据，不能理解指令语义或保证客户端实际运行行为；图谱筛选后保留缩放/平移状态尚未实现。[发布门禁](docs/release-gates.md) 给出可复现检查；真实 Linux 视觉基线及审阅仍是未关闭门禁，因此不能把功能测试通过等同于可正式发布。建库、推送与发布需另行操作。详细设计见 [架构文档](docs/architecture.md)，安全反馈见 [SECURITY.md](SECURITY.md)。项目采用 Apache-2.0 许可证。

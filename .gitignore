@@ -2,8 +2,6 @@
 /dist/
 /coverage.out
 /.hscope-test/
-/.worktrees/
-/.superpowers/
 /web/node_modules/
 /web/test-results/
 /.zerotoken/

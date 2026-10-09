@@ -1,182 +1,94 @@
-<div align="center">
-  <img src="docs/assets/harnessscope-logo.png" width="132" alt="HarnessScope Logo">
-  <h1>HarnessScope</h1>
-  <p><strong>给 AI 编码助手做一次配置体检</strong></p>
-  <p>一眼看清 Codex、Claude Code、Cursor 与 OpenCode 的配置来源、冲突、失效路径和重复上下文。</p>
+# HarnessScope
 
-  <p>
-    <a href="https://github.com/Z-lab-boop/HarnessScope/actions/workflows/ci.yml"><img src="https://github.com/Z-lab-boop/HarnessScope/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-    <img src="https://img.shields.io/badge/Go-1.24%2B-00ADD8?logo=go&logoColor=white" alt="Go 1.24+">
-    <img src="https://img.shields.io/badge/License-Apache--2.0-7C3AED" alt="Apache-2.0">
-    <img src="https://img.shields.io/badge/运行方式-本地离线-10B981" alt="本地离线">
-    <img src="https://img.shields.io/badge/遥测-无-22D3EE" alt="无遥测">
-  </p>
+HarnessScope v0.2 is a local, offline inspector and browser dashboard for coding-agent configuration. It answers three practical questions:
 
-  <p>
-    <a href="#-一分钟启动">一分钟启动</a> ·
-    <a href="#-真实界面">界面预览</a> ·
-    <a href="#-它能发现什么">能力清单</a> ·
-    <a href="README.zh-CN.md">完整中文说明</a> ·
-    <a href="#english-overview">English</a>
-  </p>
-</div>
+1. Which configuration and instruction files were discovered?
+2. Where did an effective rule, MCP server, hook, or skill come from?
+3. Which conflicts, missing paths, and duplicated context are actionable?
 
-![HarnessScope 配置观测站主视觉](docs/assets/harnessscope-hero.png)
+It currently supports verified adapters for Codex `0.162.0-alpha.2` and Claude Code `2.1.259`, plus conservative preview adapters for Cursor and OpenCode. Preview adapters discover documented local sources but do not claim confirmed precedence or shadowing.
 
-> **不是又一个“帮你改配置”的黑盒。** HarnessScope 更像一台配置 X 光机：先发现、再解释、最后只对明确安全的操作提供可回滚修复。
+## Five-minute start
 
-## 🧭 你的配置，可能比想象中更复杂
-
-一个编码助手可能同时读取用户级、项目级和嵌套目录中的 Rules、MCP、Hook、Skill 与指令文件。名字相同不代表行为相同，文件存在也不代表命令能启动。
-
-HarnessScope 聚焦三个问题：
-
-| 你真正想知道的 | HarnessScope 给出的答案 |
-|---|---|
-| **到底加载了什么？** | 枚举已发现的配置与指令来源，并标注客户端、作用域和证据等级。 |
-| **这一条从哪里来的？** | 用来源图谱解释 Rule、MCP、Hook、Skill 的加载与覆盖关系。 |
-| **现在应该处理什么？** | 定位冲突、失效路径、重复上下文、裸命令和潜在凭据暴露。 |
-
-```mermaid
-flowchart LR
-    A[本地配置与指令] --> B[发现与解析]
-    B --> C[证据化来源图谱]
-    C --> D[结构诊断]
-    D --> E{处理方式}
-    E -->|SAFE| F[预览 · 备份 · 修复 · 验证]
-    E -->|REVIEW| G[交给人判断]
-    E -->|BLOCKED| H[明确阻止自动修改]
-```
-
-## ⚡ 一分钟启动
-
-当前公开仓库尚未发布正式二进制 Release，请从源码构建：
+Download the archive for your operating system and architecture from GitHub Releases, then verify it against `SHA256SUMS` before extracting:
 
 ```sh
-git clone https://github.com/Z-lab-boop/HarnessScope.git
-cd HarnessScope
+shasum -a 256 -c SHA256SUMS
+tar -xzf harnessscope_v0.2.0_darwin_arm64.tar.gz
+./hscope serve . --port 0 --open
+```
+
+Linux users can use `sha256sum -c SHA256SUMS`. Archives target darwin/linux × amd64/arm64 and contain the binary, license, notices, security policy, docs and both READMEs. Local candidate archives do not imply a published release. Until a tagged release exists, build from source with Go 1.24 or newer:
+
+```sh
 go build -trimpath -o bin/hscope ./cmd/hscope
 ./bin/hscope serve . --port 0 --open
 ```
 
-浏览器会打开一次性认证地址。服务只监听 `127.0.0.1`，没有云端服务、遥测或后台实时监控。只想看终端结果：
+By default, JSON and self-contained HTML reports are written under the platform application-data directory, not into the scanned repository. Use `--no-report` for terminal-only inspection.
 
-```sh
-./bin/hscope scan . --no-report
-```
-
-## 🖥️ 真实界面
-
-下列画面均由仓库内置的 Playwright 合成夹具生成，不包含真实用户配置。
-
-<table>
-  <tr>
-    <td width="50%"><img src="docs/assets/dashboard-overview.png" alt="风险与客户端概览"><br><strong>01 · Overview</strong><br>客户端证据、风险和上下文成本一屏掌握。</td>
-    <td width="50%"><img src="docs/assets/dashboard-graph.png" alt="配置来源图谱"><br><strong>02 · Graph</strong><br>沿着来源、加载、覆盖和引用关系追踪配置。</td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="docs/assets/dashboard-findings.png" alt="结构性诊断结果"><br><strong>03 · Findings</strong><br>按客户端、严重度和证据等级筛选问题。</td>
-    <td width="50%"><img src="docs/assets/dashboard-fix-confirmation.png" alt="安全修复确认"><br><strong>04 · Fix Center</strong><br>核对精确变更后，才允许应用 SAFE 修复。</td>
-  </tr>
-</table>
-
-<details>
-<summary><strong>再看一张：脱敏诊断包导出</strong></summary>
-
-![HarnessScope 导出界面](docs/assets/dashboard-export.png)
-
-导出包包含报告、离线 HTML、清单和可选漂移结果；不包含原始配置、备份、会话令牌或明文凭据。
-</details>
-
-## 🔬 它能发现什么
-
-| 能力 | 例子 | 输出方式 |
-|---|---|---|
-| 🧬 **来源追踪** | 同名 MCP 在多个客户端或作用域重复声明 | 图谱、来源链、证据等级 |
-| ⚡ **启动风险** | 命令不存在、绝对路径失效、Hook 无执行权限 | 可操作 Finding |
-| 🧩 **配置分歧** | 相同名称对应不同的安全化声明 | 多客户端 Compare |
-| 🧠 **上下文体检** | 指令内容重复加载、导入关系异常 | 保守 token 区间与关系边 |
-| 🔐 **凭据预警** | 项目配置出现 credential-shaped 字段 | 立即脱敏，只报告类别 |
-| 🧯 **安全修复** | 字节级重复行、执行位、同对象规范路径 | dry-run、备份、原子写入、自动回滚 |
-| 🕰️ **漂移追踪** | 配置身份、诊断或安全语义发生变化 | 本地脱敏基线，不展示原始值 |
-| 📦 **诊断导出** | 需要分享一个最小化问题包 | 确定性 ZIP 与 SHA-256 清单 |
-
-## 🧱 支持边界
-
-| 客户端 | 等级 | v0.2 边界 |
-|---|---|---|
-| **Codex** | `VERIFIED` | 精确验证 `0.162.0-alpha.2`；其他版本显示兼容性未知。 |
-| **Claude Code** | `VERIFIED` | 精确验证 `2.1.259`；其他版本显示兼容性未知。 |
-| **Cursor** | `PREVIEW` | 检查文档化的本地 Rules 与 MCP 来源，不声称确定的覆盖优先级。 |
-| **OpenCode** | `PREVIEW` | 检查本地 JSON/JSONC 与指令来源，不拉取远程配置。 |
-
-`VERIFIED` 表示适配规则在指定版本上有证据，并不表示你的配置一定安全；`PREVIEW` 表示只做保守发现，不把未知行为包装成事实。
-
-## 🛡️ 默认把安全边界画清楚
-
-- **Local-first**：扫描、报告、快照、备份和回滚都留在本机。
-- **Privacy-first**：秘密字段在解析后立即脱敏，扫描根目录折叠为 `.`，用户目录折叠为 `~`。
-- **Dry-run-first**：`fix` 默认只预览；只有显式 `--apply` 才会修改。
-- **Fail-closed**：执行前校验预览授权、revision 与源文件哈希；失败时拒绝或自动回滚。
-- **Evidence-bounded**：不启动 MCP 服务，不猜测未公开的客户端内部逻辑。
-
-秘密检测无法覆盖所有专有格式。公开分享报告或 ZIP 前，仍应进行一次人工检查。
-
-## 🧰 常用命令
-
-<details>
-<summary>展开 CLI 速查表</summary>
+## Commands
 
 ```text
 hscope scan [path] [--client all|codex|claude|cursor|opencode]
-hscope explain <规范化名称> [--client ...] [--path ...]
-hscope compare <客户端A> <客户端B> [--path ...]
+hscope explain <normalized-name> [--client ...] [--path ...]
+hscope compare <client-a> <client-b> [--path ...]
 hscope report --from report.json --html report.html
-hscope fix [修复ID...]              # 默认仅预览
-hscope fix [修复ID...] --apply      # 只应用 SAFE 修复
-hscope rollback <备份ID>
+hscope fix [fix-id...]              # dry-run by default
+hscope fix [fix-id...] --apply      # SAFE fixes only
+hscope rollback <backup-id>
 hscope serve [path] [--port 0] [--open] [--client ...]
-hscope snapshot save <名称> [path]
+hscope snapshot save <name> [path]
 hscope snapshot list
-hscope snapshot diff <名称> [path]
-hscope export [path] --output diagnostic.zip [--baseline <名称>] [--force]
-hscope --version
-```
-</details>
-
-## 🎮 先用虚构配置试玩
-
-```sh
-./demo/run.sh          # 非交互断言与报告
-./demo/dashboard.sh    # 启动一次性浏览器演示
+hscope snapshot diff <name> [path]
+hscope export [path] --output diagnostic.zip [--baseline <name>] [--force]
+hscope --version                  # stamped release version, or 0.2.0-dev from source
 ```
 
-演示只操作临时目录中的合成配置，拒绝已存在的系统级托管配置。它不会修改你的真实编码助手设置。
+## Local control center
 
-## 🚦 当前状态
+`serve` binds only to `127.0.0.1`; port 0 selects an available port. Open the authenticated URL printed once on startup. Its fragment token is consumed into memory and removed from the address bar; reloading requires opening the original launch URL again. Ctrl-C shuts the server down. There is no remote access, cloud service, telemetry or background live monitoring. Rescan explicitly refreshes the fixed workspace snapshot.
 
-- ✅ 源码、双平台 CI、竞态测试、浏览器回归和四平台候选归档验证已公开。
-- 🟡 Linux 的 Report、Overview、Graph 三套人工审核视觉基线仍为 **OPEN**。
-- 🔒 正式 Release 工作流会在上述门禁关闭前拒绝发布；当前没有伪装成正式版的二进制下载。
-- 🧭 后续方向：扩展版本证据、更多客户端适配、图谱视口持久化与正式签名发布。
+Overview shows client evidence and risk summaries; Graph exposes provenance and an inspector; Findings filters structural checks; Compare shows normalized declarations. In Fix Center, select SAFE plans, inspect the exact preview and confirm application. REVIEW and BLOCKED plans cannot be applied from the browser. A stale revision refreshes state and requires an explicit retry. Backups and rollback remain local.
 
-详细边界见 [发布门禁](docs/release-gates.md)、[视觉证据](docs/visual-baselines.md)、[架构](docs/architecture.md) 与 [安全策略](SECURITY.md)。
+![Synthetic dashboard overview](docs/assets/dashboard-overview.png)
 
-## 🤝 一起把配置黑盒变透明
+Illustrative macOS Chromium capture of the committed Playwright synthetic fixture; not real user configuration and not a Linux visual regression baseline. [Visual provenance and open Linux release gate](docs/visual-baselines.md).
 
-欢迎提交 Issue、补充可复核的客户端证据，或贡献新的结构诊断规则。如果 HarnessScope 对你有帮助，欢迎点一个 ⭐，让更多使用 AI 编码助手的人看到它。
+Drift saves named, sanitized local baselines and compares normalized identities and fingerprints. Names use 1–64 ASCII letters, digits, dots, underscores or hyphens, starting with a letter/digit; saving an existing name replaces that baseline. Drift intentionally omits raw before/after values, paths and timestamps and is not a semantic diff. Baselines are stored in platform application data, with user-only permissions.
 
-<a id="english-overview"></a>
-<details>
-<summary><strong>English overview</strong></summary>
+Export writes `report.json`, self-contained `report.html`, `README.txt`, `manifest.json` and optionally `drift.json`. The manifest records client tiers, tool/schema versions, generation time and member SHA-256 hashes. It excludes raw configurations, secrets, backups and session tokens. Browser downloads remain local; CLI refuses an existing output unless `--force` is explicit. Review all contents before uploading publicly. Sanitization is a defense, not a guarantee for arbitrary proprietary formats.
 
-HarnessScope is a local, offline configuration observatory for coding agents. It discovers configuration and instruction sources, explains provenance, surfaces structural risks, previews strictly bounded SAFE fixes, tracks sanitized drift, and exports deterministic diagnostic bundles. Codex and Claude Code adapters have version-specific verified evidence; Cursor and OpenCode remain conservative previews. No cloud service, telemetry, or background monitoring is involved.
+Run `./demo/run.sh` for noninteractive assertions or `./demo/dashboard.sh` for the disposable browser demo. Both copy committed synthetic configuration to temporary state and refuse existing managed agent configuration. The assertions cover duplicate MCP/context, missing paths, unsupported client versions, unavailable bare commands, nonportable paths, divergent declarations, project secret presence and escaping symlinks, then snapshot/drift/ZIP round trips and credential/path leak checks. Only the noninteractive demo retains temporary artifacts for inspection.
 
-Build from source with Go 1.24 or newer. A tagged binary release is intentionally blocked until the reviewed Linux visual baseline gate is closed.
-</details>
+## Safety and privacy
 
----
+- Scans are local and reports have no external assets or network requests.
+- Secret-shaped fields and credential patterns are redacted immediately after parsing.
+- Reports collapse the scanned root to `.` and the home directory to `~`.
+- `fix` is a dry-run unless `--apply` is explicit.
+- Automatic fixes are intentionally limited to three `SAFE` operations: exact duplicate-line removal in one source, executable-bit repair for an existing shebang hook, and canonical-path normalization to the same filesystem object.
+- Every applied fix checks source hashes, creates user-only backups, writes atomically where content changes are involved, rescans, and automatically rolls back when verification fails.
 
-<div align="center">
-  <sub>Apache-2.0 · Built for transparent, local-first agent configuration</sub>
-</div>
+No secret detector is perfect. Review a report before publishing it, especially when configuration contains unusual proprietary identifiers.
+
+## Compatibility tiers
+
+| Client | Tier | v0.2 boundary |
+|---|---|---|
+| Codex | VERIFIED | Exact ruleset verified against `0.162.0-alpha.2`; other versions are marked compatibility unknown. |
+| Claude Code | VERIFIED | Exact ruleset verified against `2.1.259`; other versions are marked compatibility unknown. |
+| Cursor | PREVIEW | Documented local rule and MCP sources; no confirmed effective-precedence claims. |
+| OpenCode | PREVIEW | Documented local JSON/JSONC and instruction sources; remote config is not fetched and effective merge precedence is not asserted. |
+
+## Limitations and roadmap
+
+HarnessScope does not execute MCP servers, contact remote configuration endpoints, infer undisclosed client internals, or treat preview behavior as verified. Context token counts are bounded estimates rather than provider billing values.
+
+Checks are structural and evidence-bounded; HarnessScope does not understand instruction semantics or guarantee client runtime behavior. Pan/zoom persistence across graph filter rerenders is deferred. Evidence snapshots for current adapter claims live under `docs/evidence/`. See [release gates](docs/release-gates.md) for reproducible local checks and the currently open reviewed-Linux visual gate. Repository creation, push and release publication are separate operator actions.
+
+See [architecture](docs/architecture.md), [contributing](CONTRIBUTING.md), and [security policy](SECURITY.md). The project is licensed under Apache-2.0.
+
+## 中文
+
+中文说明见 [README.zh-CN.md](README.zh-CN.md)。

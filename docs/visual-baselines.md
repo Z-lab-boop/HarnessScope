@@ -1,10 +1,8 @@
 # Visual evidence and open Linux gate
 
-The public dashboard gallery (`docs/assets/dashboard-*.png`) contains illustrative local macOS Chromium captures of committed synthetic Playwright fixtures. They are not Linux regression baselines or evidence from real user configuration. The README labels them as synthetic product captures.
+The public `assets/dashboard-overview.png` is an illustrative local macOS Chromium capture of the committed synthetic `web/dashboard/tests/fixture-state.json`, rendered by `dashboard.spec.ts`. It is not a Linux regression baseline or evidence from real user configuration.
 
-Capture record: 2026-10-09, macOS arm64, Chromium 141.0.7390.37 (Playwright 1.56.1 cached build 1194), 1440 × 1000 desktop and 768 × 900 compact viewports with reduced motion. The committed synthetic dashboard state and test-owned export/fix fixtures were used. The implementing agent visually inspected the actual pixels: cards, graph labels, navigation, findings, confirmation dialog and export controls are readable and unclipped. This records agent visual inspection, not an independent human review.
-
-`docs/assets/harnessscope-logo.png` and `docs/assets/harnessscope-hero.png` are brand illustrations generated with OpenAI's built-in image generation on 2026-10-09. They make no product-state claims and are not test evidence. The logo is a transparent raster mark; the hero is decorative artwork without text or simulated UI.
+Capture record: 2026-10-09, macOS arm64, Chromium 141.0.7390.37 (Playwright 1.56.1 cached build 1194), 1440 × 1000 viewport with a 1440 × 1060 full-page image and reduced motion. Fixture commit: `44390063766fb53562ab77a2b06696d5b177d2e8`; fixture SHA-256: `efc2c808745a1007332fa63e1d2b19075e6cd89f53d32c368918c0a359a5bebf`. Image SHA-256: `72a0ca530a7e805f749a4a3c64ee50bc665b0fe24d8e26441a1077387b040878`. The implementing agent visually inspected the actual pixels at full size: all cards, tier labels, navigation, inspector and evidence footer are readable and unclipped. This records agent visual inspection, not an independent human review.
 
 No reviewed Linux report, Overview or Graph baseline is currently checked in. The old `web/tests/__snapshots__/report.png` has unverified platform provenance and is not used as a regression baseline. Functional Playwright tests run on both CI platforms; the three explicitly named Linux visual tests are skipped until reviewed artifacts exist. This is an **OPEN release gate**, not a passing visual comparison.
 
