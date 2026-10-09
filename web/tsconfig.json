@@ -7,5 +7,5 @@
     "noEmit": true,
     "lib": ["ES2020", "DOM"]
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts", "dashboard/**/*.ts"]
+  "include": ["src/**/*.ts", "tests/**/*.ts", "dashboard/**/*.ts", "site/**/*.ts"]
 }

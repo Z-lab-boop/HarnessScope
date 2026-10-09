@@ -7,7 +7,9 @@
     "build:dashboard": "esbuild dashboard/src/app.ts --bundle --minify --target=es2020 --outfile=../internal/server/assets/dashboard.js && esbuild dashboard/src/dashboard.css --bundle --minify --outfile=../internal/server/assets/dashboard.css && node -e \"require('node:fs').copyFileSync('dashboard/index.html', '../internal/server/assets/index.html')\"",
     "build": "npm run build:report && npm run build:dashboard",
     "test:visual": "playwright test",
-    "test:dashboard": "playwright test --config dashboard/playwright.config.ts"
+    "test:dashboard": "playwright test --config dashboard/playwright.config.ts",
+    "build:site": "node site/build.mjs",
+    "test:site": "npm run build:site && playwright test --config site/playwright.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",
